@@ -506,13 +506,8 @@ let activeCreds: any = null;
                                 
                                 $cpu = ""; $os = ""; $model = ""; $user = ""; $ramGb = ""; $name = ""; $domain = ""; $gpu = ""; $diskStr = "";
                                 
-                                try {
-                                    $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor -ErrorAction Stop | Select-Object -First 1
-                                    if ($cpuObj) { $cpu = $cpuObj.Name }
-                                } catch {
-                                    Write-Output "WMI_ERROR|$($_.Exception.Message)"
-                                    exit
-                                }
+                                $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1
+                                if ($cpuObj) { $cpu = $cpuObj.Name }
 
                                 $osObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1
                                 if ($osObj) { $os = $osObj.Caption }
