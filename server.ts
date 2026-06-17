@@ -502,9 +502,10 @@ let activeCreds: any = null;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    $gpu = ((Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController).Name) -join ", ";
-                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Model)|$([math]::Round($_.Size / 1GB))" };
-                                    $diskStr = $disks -join ";";
+                                    $gpuList = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" } | ForEach-Object { if ($_.AdapterRAM) { "$($_.Name) ($([math]::Round($_.AdapterRAM / 1GB, 2)) GB)" } else { $_.Name } };
+                                    $gpu = $gpuList -join ", ";
+                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object { "$($_.DeviceID) ($([math]::Round($_.FreeSpace / 1GB, 1)) GB free of $([math]::Round($_.Size / 1GB, 1)) GB)" };
+                                    $diskStr = $disks -join " | ";
                                     
                                     Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)|GPU:$gpu|Storage:$diskStr"
                                 } catch {
@@ -583,6 +584,45 @@ let activeCreds: any = null;
           res.write(`data: ${JSON.stringify({ progress: 100, complete: true })}\n\n`);
       }
       res.end();
+  });
+
+  app.post('/api/test-wmi', (req, res) => {
+      const { ip, user, pass } = req.body;
+      if (!ip) {
+          return res.status(400).json({ success: false, message: "IP is required" });
+      }
+      
+      let credInjection = "";
+      let credParam = "";
+      
+      if (user && pass) {
+          credInjection = `
+              $secpasswd = ConvertTo-SecureString "${pass.replace(/"/g, '""')}" -AsPlainText -Force;
+              $mycreds = New-Object System.Management.Automation.PSCredential ("${user.replace(/"/g, '""')}", $secpasswd);
+          `;
+          credParam = "-Credential $mycreds";
+      }
+
+      const psCmd = `
+          try {
+              $ErrorActionPreference = 'Stop';
+              ${credInjection}
+              $os = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem -ErrorAction Stop | Select-Object -First 1;
+              Write-Output "SUCCESS"
+          } catch {
+              Write-Output "ERROR|$($_.Exception.Message)"
+          }
+      `;
+      
+      const psCmdBase64 = Buffer.from(psCmd, 'utf16le').toString('base64');
+      exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${psCmdBase64}`, { timeout: 10000 }, (err, stdout) => {
+          if (stdout && stdout.includes("SUCCESS")) {
+              res.json({ success: true });
+          } else {
+              const errMsg = stdout.includes("ERROR|") ? stdout.split("ERROR|")[1].trim() : "Unknown error";
+              res.json({ success: false, message: errMsg });
+          }
+      });
   });
 
   app.post('/api/assets', async (req, res) => {

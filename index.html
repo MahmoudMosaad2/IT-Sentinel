@@ -697,14 +697,6 @@
           </button>
 
           <button
-            class="btn btn-outline-light w-100 btn-sm mt-1 mb-1 border-opacity-25"
-            onclick="showScriptModal()"
-            style="border-radius: 6px; font-size: 11px"
-          >
-            <i class="fa fa-terminal ms-1"></i> تحميل بيانات الأجهزة (بدون WMI)
-          </button>
-
-          <button
             class="btn btn-outline-danger w-100 btn-sm mt-1 mb-1 border-opacity-25"
             onclick="clearDatabase()"
             style="border-radius: 6px; font-size: 11px"
@@ -2708,6 +2700,45 @@
         modal.hide();
         
         alert(currentLang === 'ar' ? "تم إعدادات حساب المصادقة بنجاح وسيتم استخدامه في عمليات الفحص" : "Credential configuration saved and will be used in future scans.");
+      }
+
+      async function testWmiCreds() {
+          const ip = document.getElementById("wmiTestIp").value;
+          const user = document.getElementById("wmiUsername").value;
+          const pass = document.getElementById("wmiPassword").value;
+          const resEl = document.getElementById("wmiTestResult");
+
+          if (!ip || !user) {
+              resEl.innerText = currentLang === 'ar' ? "الرجاء إدخال IP واليوزر" : "Please fill IP and Username";
+              resEl.className = "mt-2 text-center text-danger";
+              resEl.style.display = "block";
+              return;
+          }
+
+          document.getElementById("testWmiBtn").disabled = true;
+          resEl.innerText = "جاري الفحص...";
+          resEl.className = "mt-2 text-center text-secondary";
+          resEl.style.display = "block";
+
+          try {
+              const res = await fetch("/api/test-wmi", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ ip, user, pass })
+              });
+              const data = await res.json();
+              if (data.success) {
+                  resEl.innerHTML = `<i class="fa fa-check-circle text-success"></i> ${currentLang === 'ar' ? "الاتصال نجح والصلاحيات صحيحة" : "Connection successful"}`;
+                  resEl.className = "mt-2 text-center text-success";
+              } else {
+                  resEl.innerHTML = `<i class="fa fa-times-circle text-danger"></i> ${data.message || "فشل الاتصال أو الصلاحيات خاطئة"}`;
+                  resEl.className = "mt-2 text-center text-danger";
+              }
+          } catch(e) {
+              resEl.innerHTML = `<i class="fa fa-times-circle text-danger"></i> Error: ${e.message}`;
+              resEl.className = "mt-2 text-center text-danger";
+          }
+          document.getElementById("testWmiBtn").disabled = false;
       }
 
       async function startScan() {
@@ -6359,70 +6390,6 @@
         XLSX.writeFile(wb, "IT_Assets_Report.xlsx");
       }
 
-      function showScriptModal() {
-        const protocol = window.location.protocol;
-        const host = window.location.host || "localhost:3000";
-
-        const scriptCode = `$serverUrl = "${protocol}//${host}/api/assets"
-
-try {
-    $cpu = (Get-WmiObject Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1).Name
-    $os = (Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue | Select-Object -First 1).Caption
-    $cs = Get-WmiObject Win32_ComputerSystem -ErrorAction SilentlyContinue | Select-Object -First 1
-    $mem = Get-WmiObject Win32_PhysicalMemory -ErrorAction SilentlyContinue | Measure-Object -Property Capacity -Sum
-    $ramGb = [math]::Round($mem.Sum / 1GB)
-    $net = Get-WmiObject Win32_NetworkAdapterConfiguration -ErrorAction SilentlyContinue | Where-Object {$_.IPEnabled -eq $true} | Select-Object -First 1
-    $gpu = (Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1).Name
-    
-    $disks = Get-WmiObject Win32_DiskDrive -ErrorAction SilentlyContinue
-    $storageArray = @()
-    foreach ($disk in $disks) {
-        $storageArray += @{
-            model = $disk.Model
-            capacity = [math]::Round($disk.Size / 1GB)
-        }
-    }
-    
-    $domainPart = $cs.Domain
-    if ($domainPart -match "^([^\.]+)") { $domainPart = $matches[1].ToUpper() }
-    
-    $bodyObj = @{
-        asset = $cs.Name
-        domain = $domainPart
-        ipAddress = $net.IPAddress[0]
-        macAddress = $net.MACAddress
-        processor = $cpu
-        ram = "$ramGb GB"
-        vga = $gpu
-        storage = $storageArray
-        osVersion = $os
-        model = $cs.Model
-        user = $env:USERNAME
-        status = "Active"
-    }
-    
-    $body = $bodyObj | ConvertTo-Json
-    Invoke-RestMethod -Uri $serverUrl -Method Post -Body $body -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
-} catch {}`;
-
-        document.getElementById("psScriptCode").innerText = scriptCode;
-        const modal = new bootstrap.Modal(
-          document.getElementById("scriptModal"),
-        );
-        modal.show();
-      }
-
-      function copyScript() {
-        navigator.clipboard.writeText(
-          document.getElementById("psScriptCode").innerText,
-        );
-        alert(
-          currentLang === "ar"
-            ? "تم نسخ الكود بنجاح!"
-            : "Script copied to clipboard!",
-        );
-      }
-
       // Initialize App
       setLanguage(currentLang);
       checkAuth();
@@ -6482,57 +6449,24 @@ try {
                 dir="ltr"
               />
             </div>
+            
+            <div class="alert alert-secondary p-2 mb-3" style="font-size: 12px;">
+                <label class="form-label fw-bold mb-1">اختبار الاتصال بـ WMI (اختياري)</label>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="wmiTestIp" class="form-control text-start" dir="ltr" placeholder="IP للجهاز المراد الإختبار عليه">
+                    <button class="btn btn-outline-secondary" id="testWmiBtn" onclick="testWmiCreds()">
+                        <i class="fa fa-bolt text-warning"></i> Test
+                    </button>
+                </div>
+                <div id="wmiTestResult" class="mt-2 text-center" style="display:none; font-weight: bold;"></div>
+            </div>
+
             <button
               class="btn btn-primary w-100 btn-sm mt-2 fw-bold shadow-sm"
               onclick="confirmScanCreds()"
             >
               حفظ بيانات المصادقة
             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Logon Script Modal for WMI Alternative -->
-    <div class="modal fade" id="scriptModal" tabindex="-1">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title fw-bold text-dark">
-              <i class="fa fa-terminal me-2 text-primary"></i> جمع بيانات
-              الأجهزة دون الحاجة لـ WMI أو جدار الحماية
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-            ></button>
-          </div>
-          <div class="modal-body pb-0 text-end" style="direction: rtl">
-            <p class="text-muted" style="font-size: 14px">
-              نظراً لأن جدار الحماية (Firewall) في الويندوز يمنع عمليات فحص
-              <code>WMI</code> تلقائياً ويُظهر رسالة (Access Denied / RPC Server
-              Unavailable)، يمكنك بكل بساطة تخطي هذه المشكلة عبر إضافة حزمة
-              الفحص التلقائية التالية كـ <b>Logon Script</b> في الدومين بوليسي
-              <b>Active Directory Group Policy</b>.<br /><br />
-              كل جهاز في الشبكة سيقوم بإرسال بياناته بنفسه للخادم دون أي تدخل
-              منك وبدون إعدادات للفايروول.
-            </p>
-            <div
-              class="p-3 bg-dark text-light rounded-3 position-relative mb-3"
-            >
-              <button
-                class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2"
-                onclick="copyScript()"
-                style="font-size: 11px"
-              >
-                <i class="fa fa-copy me-1"></i> نسخ الكود
-              </button>
-              <pre
-                class="m-0 text-start"
-                style="direction: ltr; font-size: 12.5px; overflow-x: auto"
-              ><code id="psScriptCode"></code></pre>
-            </div>
           </div>
         </div>
       </div>
