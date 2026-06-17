@@ -426,37 +426,47 @@ async function startServer() {
                                   }
                               });
 
-                              // Get wmic details (wrap in powershell to do it all in one call and avoid spawning too many processes)
+                              // Get wmic details
                               // Note: Remote WMI might require domain admin privileges and firewall rules allowing it on the client.
                               const psCmd = `
-                                $ErrorActionPreference = 'SilentlyContinue';
-                                $cpu = (Get-WmiObject -ComputerName ${ip} Win32_Processor | Select-Object -First 1).Name;
-                                $os = (Get-WmiObject -ComputerName ${ip} Win32_OperatingSystem | Select-Object -First 1).Caption;
-                                $cs = Get-WmiObject -ComputerName ${ip} Win32_ComputerSystem | Select-Object -First 1;
-                                $mem = Get-WmiObject -ComputerName ${ip} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
-                                
-                                $ramGb = [math]::Round($mem.Sum / 1GB);
-                                
-                                Write-Output "CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb"
-                              `.replace(/\n/g, ' ').trim();
+                                try {
+                                    $ErrorActionPreference = 'Stop';
+                                    $cpu = (Get-WmiObject -ComputerName ${ip} Win32_Processor | Select-Object -First 1).Name;
+                                    $os = (Get-WmiObject -ComputerName ${ip} Win32_OperatingSystem | Select-Object -First 1).Caption;
+                                    $cs = Get-WmiObject -ComputerName ${ip} Win32_ComputerSystem | Select-Object -First 1;
+                                    $mem = Get-WmiObject -ComputerName ${ip} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
+                                    
+                                    $ramGb = [math]::Round($mem.Sum / 1GB);
+                                    
+                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb"
+                                } catch {
+                                    Write-Output "WMI_ERROR|$($_.Exception.Message)"
+                                }
+                              `;
+                              const psCmdBase64 = Buffer.from(psCmd, 'utf16le').toString('base64');
 
-                              exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`, { timeout: 10000 }, (err, stdout) => {
-                                  if (!err && stdout) {
+                              exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${psCmdBase64}`, { timeout: 15000 }, (err, stdout) => {
+                                  if (stdout) {
                                       const idx = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
                                       if (idx !== -1) {
                                           const asset = assetsDatabase[idx];
-                                          const cpuMatch = stdout.match(/CPU:(.*?)\|/i);
-                                          const osMatch = stdout.match(/OS:(.*?)\|/i);
-                                          const modelMatch = stdout.match(/Model:(.*?)\|/i);
-                                          const userMatch = stdout.match(/User:(.*?)\|/i);
-                                          const ramMatch = stdout.match(/RAM:(.*?)$/i);
-                                          
-                                          if (cpuMatch && cpuMatch[1].trim()) asset.processor = cpuMatch[1].trim();
-                                          if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
-                                          if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
-                                          if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
-                                          if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
-                                          
+                                          if (stdout.includes("WMI_ERROR")) {
+                                              console.log(`[WMI Error for ${ip}]:`, stdout.trim());
+                                              asset.processor = "WMI Blocked (Check Firewall/Admin)";
+                                              asset.ram = "Access Denied";
+                                          } else if (stdout.includes("SUCCESS|")) {
+                                              const cpuMatch = stdout.match(/CPU:(.*?)\|/i);
+                                              const osMatch = stdout.match(/OS:(.*?)\|/i);
+                                              const modelMatch = stdout.match(/Model:(.*?)\|/i);
+                                              const userMatch = stdout.match(/User:(.*?)\|/i);
+                                              const ramMatch = stdout.match(/RAM:(.*?)$/m) || stdout.match(/RAM:(.*?)\r/i);
+                                              
+                                              if (cpuMatch && cpuMatch[1].trim()) asset.processor = cpuMatch[1].trim();
+                                              if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
+                                              if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
+                                              if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
+                                              if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
+                                          }
                                           saveDatabase();
                                       }
                                   }
