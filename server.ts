@@ -488,14 +488,17 @@ let activeCreds: any = null;
                               // Generate WMI query command. If credentials were provided via UI, use them.
                               let credInjection = '';
                               let credParam = '';
-                              if (activeCreds && activeCreds.domain && activeCreds.user) {
+                              if (activeCreds && activeCreds.user) {
                                   // Clean input to prevent PS injection, though this is an internal diagnostic tool
-                                  const domainSafe = activeCreds.domain.replace(/'/g, "''");
+                                  const domainSafe = (activeCreds.domain || '').replace(/'/g, "''");
                                   const userSafe = activeCreds.user.replace(/'/g, "''");
                                   const passSafe = (activeCreds.password || '').replace(/'/g, "''");
+                                  
+                                  const userString = domainSafe ? `${domainSafe}\\${userSafe}` : userSafe;
+                                  
                                   credInjection = `
                                     $secpasswd = ConvertTo-SecureString '${passSafe}' -AsPlainText -Force
-                                    $mycreds = New-Object System.Management.Automation.PSCredential ("${domainSafe}\\${userSafe}", $secpasswd)
+                                    $mycreds = New-Object System.Management.Automation.PSCredential ("${userString}", $secpasswd)
                                   `;
                                   credParam = '-Credential $mycreds';
                               }
@@ -506,8 +509,13 @@ let activeCreds: any = null;
                                 
                                 $cpu = ""; $os = ""; $model = ""; $user = ""; $ramGb = ""; $name = ""; $domain = ""; $gpu = ""; $diskStr = "";
                                 
-                                $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1
-                                if ($cpuObj) { $cpu = $cpuObj.Name }
+                                try {
+                                    $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor -ErrorAction Stop | Select-Object -First 1
+                                    if ($cpuObj) { $cpu = $cpuObj.Name }
+                                } catch {
+                                    Write-Output "WMI_ERROR|$($_.Exception.Message)"
+                                    exit
+                                }
 
                                 $osObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1
                                 if ($osObj) { $os = $osObj.Caption }
