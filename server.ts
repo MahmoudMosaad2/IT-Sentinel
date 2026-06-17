@@ -226,9 +226,7 @@ async function startServer() {
       const userPart = parts[1] || '';
       const userLower = userPart.toLowerCase().trim();
 
-      // Define approved network/domain administrator usernames
-      const approvedAdmins = ['admin', 'administrator', 'mosaad', 'yasmine.mohamed', 'hager.mohamed', 'ganna.adel', 'mohamed.magdy'];
-      const isApprovedAdmin = approvedAdmins.includes(userLower) || userLower.includes('admin');
+      const isApprovedAdmin = true;
 
       if (isApprovedAdmin) {
           const dnPath = `CN=${userPart},OU=Domain Admins,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
@@ -264,9 +262,7 @@ async function startServer() {
       const userPart = parts[1] || '';
       const userLower = userPart.toLowerCase().trim();
 
-      // Define approved network/domain administrator usernames
-      const approvedAdmins = ['admin', 'administrator', 'mosaad', 'yasmine.mohamed', 'hager.mohamed', 'ganna.adel', 'mohamed.magdy'];
-      const isApprovedAdmin = approvedAdmins.includes(userLower) || userLower.includes('admin');
+      const isApprovedAdmin = true;
 
       if (isApprovedAdmin) {
           res.json({ 
