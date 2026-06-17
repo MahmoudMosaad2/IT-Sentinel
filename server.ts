@@ -425,7 +425,13 @@ let activeCreds: any = null;
                               
                               if (existingIndex !== -1) {
                                   assetsDatabase[existingIndex].status = "Active";
-                                  assetsDatabase[existingIndex].asset = name;
+                                  const currentName = assetsDatabase[existingIndex].asset || "";
+                                  const isCurrentPlaceholder = currentName.startsWith("PC-") || currentName === "N/A" || currentName === ip;
+                                  
+                                  if (isCurrentPlaceholder || (!name.startsWith("PC-") && name !== "N/A" && name !== ip)) {
+                                      assetsDatabase[existingIndex].asset = name;
+                                  }
+                                  
                                   if (domainName) assetsDatabase[existingIndex].domain = cleanDomain;
                               } else {
                                   assetsDatabase.push({
@@ -498,14 +504,64 @@ let activeCreds: any = null;
                                     $cpu = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1).Name;
                                     $os = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1).Caption;
                                     $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1;
-                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
+                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory -ErrorAction SilentlyContinue | Measure-Object -Property Capacity -Sum;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    $gpuList = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" } | Select-Object -ExpandProperty Name;
+                                    $gpus = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" }
+                                    $gpuList = @()
+                                    foreach ($g in $gpus) {
+                                        if ($g.AdapterRAM) { 
+                                            $gb = [math]::Round($g.AdapterRAM / 1GB, 1)
+                                            if ($gb -ge 4) {
+                                                $gpuList += "$($g.Name) ($gb GB or more*)"
+                                            } else {
+                                                $gpuList += "$($g.Name) ($gb GB)"
+                                            }
+                                        } else { 
+                                            $gpuList += $g.Name 
+                                        }
+                                    }
                                     $gpu = $gpuList -join ", ";
-                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object { "$($_.DeviceID) ($([math]::Round($_.FreeSpace / 1GB, 1)) GB free of $([math]::Round($_.Size / 1GB, 1)) GB)" };
-                                    $diskStr = $disks -join " | ";
+
+                                    $storageList = @()
+                                    
+                                    # Fallback simple logical disks collection
+                                    $lDisks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+                                    
+                                    # Try to get physical disk types (requires Windows 8/2012+)
+                                    $pDisksStr = ""
+                                    try {
+                                        $pDisks = Get-WmiObject -ComputerName ${ip} ${credParam} -Namespace "root\\Microsoft\\Windows\\Storage" -Class MSFT_PhysicalDisk -ErrorAction Stop
+                                        $pdList = @()
+                                        foreach ($pd in $pDisks) {
+                                            $type = "HDD"
+                                            if ($pd.MediaType -eq 4) { $type = "SSD" }
+                                            elseif ($pd.MediaType -eq 3) { $type = "HDD" }
+                                            $size = [math]::Round($pd.Size / 1GB, 1)
+                                            $pdList += "$($pd.FriendlyName) ($type) - $size GB"
+                                        }
+                                        $pDisksStr = $pdList -join " | "
+                                    } catch {}
+
+                                    if ($pDisksStr -ne "") {
+                                        # Got physical disks, prepend them to logical partitions
+                                        foreach ($ld in $lDisks) {
+                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        }
+                                        $diskStr = "$pDisksStr | " + ($storageList -join " | ")
+                                    } else {
+                                        # Just Logical and Win32_DiskDrive fallback
+                                        $dDs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive -ErrorAction SilentlyContinue
+                                        foreach ($dd in $dDs) {
+                                            $size = [math]::Round($dd.Size / 1GB, 1)
+                                            $storageList += "$($dd.Model) - $size GB"
+                                        }
+                                        foreach ($ld in $lDisks) {
+                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        }
+                                        $diskStr = $storageList -join " | "
+                                    }
                                     
                                     Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)|GPU:$gpu|Storage:$diskStr"
                                 } catch {
