@@ -478,7 +478,11 @@ let activeCreds: any = null;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)"
+                                    $gpu = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController | Select-Object -First 1).Name;
+                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "$($_.DeviceID)|$([math]::Round($_.Size / 1GB))" };
+                                    $diskStr = $disks -join ";";
+                                    
+                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)|GPU:$gpu|Storage:$diskStr"
                                 } catch {
                                     Write-Output "WMI_ERROR|$($_.Exception.Message)"
                                 }
@@ -500,16 +504,27 @@ let activeCreds: any = null;
                                               const modelMatch = stdout.match(/Model:(.*?)\|/i);
                                               const userMatch = stdout.match(/User:(.*?)\|/i);
                                               const nameMatch = stdout.match(/Name:(.*?)\|/i);
-                                              const domainMatch = stdout.match(/Domain:(.*?)$/m) || stdout.match(/Domain:(.*?)\r/i);
+                                              const domainMatch = stdout.match(/Domain:(.*?)\|/i) || stdout.match(/Domain:(.*?)$/m);
                                               const ramMatch = stdout.match(/RAM:(.*?)\|/i);
+                                              const gpuMatch = stdout.match(/GPU:(.*?)\|/i);
+                                              const storageMatch = stdout.match(/Storage:(.*?)$/m) || stdout.match(/Storage:(.*?)\r/i);
                                               
                                               if (cpuMatch && cpuMatch[1].trim()) asset.processor = cpuMatch[1].trim();
                                               if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
                                               if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
                                               if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
                                               if (nameMatch && nameMatch[1].trim()) asset.asset = nameMatch[1].trim();
-                                              if (domainMatch && domainMatch[1].trim()) asset.domain = domainMatch[1].trim().toUpperCase();
+                                              if (domainMatch && domainMatch[1].trim()) {
+                                                  asset.domain = domainMatch[1].trim().split('.')[0].toUpperCase();
+                                              }
                                               if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
+                                              if (gpuMatch && gpuMatch[1].trim()) asset.vga = gpuMatch[1].trim();
+                                              if (storageMatch && storageMatch[1].trim()) {
+                                                  asset.storage = storageMatch[1].trim().split(';').map((d: string) => {
+                                                      const pts = d.split('|');
+                                                      return { drive: pts[0] || 'C:', capacity: parseInt(pts[1]) || 0 };
+                                                  });
+                                              }
                                           }
                                           saveDatabase();
                                       }
