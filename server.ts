@@ -428,14 +428,17 @@ let activeCreds: any = null;
                                   const currentName = assetsDatabase[existingIndex].asset || "";
                                   const isCurrentPlaceholder = currentName.startsWith("PC-") || currentName === "N/A" || currentName === ip;
                                   
-                                  if (isCurrentPlaceholder || (!name.startsWith("PC-") && name !== "N/A" && name !== ip)) {
+                                  const isIpRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                                  
+                                  if (isCurrentPlaceholder || (!name.startsWith("PC-") && name !== "N/A" && !isIpRegex.test(name))) {
                                       assetsDatabase[existingIndex].asset = name;
                                   }
                                   
                                   if (domainName) assetsDatabase[existingIndex].domain = cleanDomain;
                               } else {
+                                  const finalName = /^(\d{1,3}\.){3}\d{1,3}$/.test(name) ? `PC-${ip.replace(/\./g, '-')}` : name;
                                   assetsDatabase.push({
-                                      asset: name,
+                                      asset: finalName,
                                       ipAddress: ip,
                                       domain: cleanDomain,
                                       status: "Active",
@@ -499,71 +502,92 @@ let activeCreds: any = null;
 
                               const psCmd = `
                                 try {
-                                    $ErrorActionPreference = 'Stop';
+                                    $ErrorActionPreference = 'SilentlyContinue';
                                     ${credInjection}
-                                    $cpu = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1).Name;
-                                    $os = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1).Caption;
-                                    $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1;
-                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory -ErrorAction SilentlyContinue | Measure-Object -Property Capacity -Sum;
                                     
-                                    $ramGb = [math]::Round($mem.Sum / 1GB);
+                                    $cpu = ""; $os = ""; $model = ""; $user = ""; $ramGb = ""; $name = ""; $domain = ""; $gpu = ""; $diskStr = "";
                                     
-                                    $gpus = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" }
+                                    $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1
+                                    if ($cpuObj) { $cpu = $cpuObj.Name }
+
+                                    $osObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1
+                                    if ($osObj) { $os = $osObj.Caption }
+
+                                    $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1
+                                    if ($cs) {
+                                        $model = $cs.Model
+                                        $user = $cs.UserName
+                                        $name = $cs.Name
+                                        $domain = $cs.Domain
+                                    }
+
+                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum
+                                    if ($mem -and $mem.Sum) {
+                                        $ramGb = [math]::Round($mem.Sum / 1GB)
+                                    }
+                                    
+                                    $gpus = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" }
                                     $gpuList = @()
-                                    foreach ($g in $gpus) {
-                                        if ($g.AdapterRAM) { 
-                                            $gb = [math]::Round($g.AdapterRAM / 1GB, 1)
-                                            if ($gb -ge 4) {
-                                                $gpuList += "$($g.Name) ($gb GB or more*)"
-                                            } else {
-                                                $gpuList += "$($g.Name) ($gb GB)"
+                                    if ($gpus) {
+                                        foreach ($g in $gpus) {
+                                            if ($g.AdapterRAM) { 
+                                                $gb = [math]::Round($g.AdapterRAM / 1GB, 1)
+                                                if ($gb -ge 4) {
+                                                    $gpuList += "$($g.Name) ($gb GB or more)"
+                                                } else {
+                                                    $gpuList += "$($g.Name) ($gb GB)"
+                                                }
+                                            } else { 
+                                                $gpuList += $g.Name 
                                             }
-                                        } else { 
-                                            $gpuList += $g.Name 
                                         }
                                     }
-                                    $gpu = $gpuList -join ", ";
+                                    $gpu = $gpuList -join ", "
 
                                     $storageList = @()
                                     
-                                    # Fallback simple logical disks collection
-                                    $lDisks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+                                    $lDisks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3"
                                     
-                                    # Try to get physical disk types (requires Windows 8/2012+)
                                     $pDisksStr = ""
                                     try {
                                         $pDisks = Get-WmiObject -ComputerName ${ip} ${credParam} -Namespace "root\\Microsoft\\Windows\\Storage" -Class MSFT_PhysicalDisk -ErrorAction Stop
                                         $pdList = @()
-                                        foreach ($pd in $pDisks) {
-                                            $type = "HDD"
-                                            if ($pd.MediaType -eq 4) { $type = "SSD" }
-                                            elseif ($pd.MediaType -eq 3) { $type = "HDD" }
-                                            $size = [math]::Round($pd.Size / 1GB, 1)
-                                            $pdList += "$($pd.FriendlyName) ($type) - $size GB"
+                                        if ($pDisks) {
+                                            foreach ($pd in $pDisks) {
+                                                $type = "HDD"
+                                                if ($pd.MediaType -eq 4) { $type = "SSD" }
+                                                elseif ($pd.MediaType -eq 3) { $type = "HDD" }
+                                                $size = [math]::Round($pd.Size / 1GB, 1)
+                                                $pdList += "$($pd.FriendlyName) ($type) - $size GB"
+                                            }
+                                            $pDisksStr = $pdList -join " | "
                                         }
-                                        $pDisksStr = $pdList -join " | "
                                     } catch {}
 
                                     if ($pDisksStr -ne "") {
-                                        # Got physical disks, prepend them to logical partitions
-                                        foreach ($ld in $lDisks) {
-                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        if ($lDisks) {
+                                            foreach ($ld in $lDisks) {
+                                                $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                            }
                                         }
                                         $diskStr = "$pDisksStr | " + ($storageList -join " | ")
                                     } else {
-                                        # Just Logical and Win32_DiskDrive fallback
-                                        $dDs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive -ErrorAction SilentlyContinue
-                                        foreach ($dd in $dDs) {
-                                            $size = [math]::Round($dd.Size / 1GB, 1)
-                                            $storageList += "$($dd.Model) - $size GB"
+                                        $dDs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive
+                                        if ($dDs) {
+                                            foreach ($dd in $dDs) {
+                                                $size = [math]::Round($dd.Size / 1GB, 1)
+                                                $storageList += "$($dd.Model) - $size GB"
+                                            }
                                         }
-                                        foreach ($ld in $lDisks) {
-                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        if ($lDisks) {
+                                            foreach ($ld in $lDisks) {
+                                                $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                            }
                                         }
                                         $diskStr = $storageList -join " | "
                                     }
                                     
-                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)|GPU:$gpu|Storage:$diskStr"
+                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$model|User:$user|RAM:$ramGb|Name:$name|Domain:$domain|GPU:$gpu|Storage:$diskStr"
                                 } catch {
                                     Write-Output "WMI_ERROR|$($_.Exception.Message)"
                                 }
@@ -594,7 +618,9 @@ let activeCreds: any = null;
                                               if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
                                               if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
                                               if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
-                                              if (nameMatch && nameMatch[1].trim()) asset.asset = nameMatch[1].trim();
+                                              if (nameMatch && nameMatch[1].trim() && !/^(\d{1,3}\.){3}\d{1,3}$/.test(nameMatch[1].trim())) {
+                                                  asset.asset = nameMatch[1].trim();
+                                              }
                                               if (domainMatch && domainMatch[1].trim()) {
                                                   let dM = domainMatch[1].trim().split('.')[0].toUpperCase();
                                                   if (dM === 'LOCAL' || dM === 'HOME') dM = 'WORKGROUP';

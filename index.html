@@ -3752,6 +3752,17 @@
                 usePc: usePc,
               };
             }
+            
+            const diskMatch = part.match(/(.*?)\s*-\s*([\d.]+)\s*(GB|TB|MB|GiB|TiB|MiB)/i);
+            if (diskMatch) {
+              let model = diskMatch[1].trim();
+              let cap = parseFloat(diskMatch[2]);
+              let type = "Disk";
+              if (model.includes("(SSD)")) { type = "SSD"; model = model.replace(/\(SSD\)/i, "").trim(); }
+              if (model.includes("(HDD)")) { type = "HDD"; model = model.replace(/\(HDD\)/i, "").trim(); }
+              return { model: model, capacity: cap, type: type, total: cap };
+            }
+
             return { drive: part.trim(), free: 0, total: 0, usePc: 0 };
           });
         }
