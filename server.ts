@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import util from 'util';
+import dns from 'dns';
 import { exec } from 'child_process';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -403,7 +404,7 @@ async function startServer() {
                           addToDb(pcName);
 
                           // Quick async DNS reverse lookup without dragging down the loop
-                          require('dns').reverse(ip, (err: any, hostnames: any) => {
+                          dns.reverse(ip, (err: any, hostnames: any) => {
                               if (!err && hostnames && hostnames.length > 0) {
                                   pcName = hostnames[0].split('.')[0].toUpperCase();
                                   addToDb(pcName);
