@@ -1,0 +1,164 @@
+[
+  {
+    "asset": "DAR-ARCH03",
+    "ipAddress": "192.168.20.3",
+    "domain": "DAR.local",
+    "processor": "Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz",
+    "ram": "64 GB",
+    "macAddress": "D8:9E:F3:34:C2:70",
+    "vga": "NVIDIA GeForce RTX 3050 4 GB",
+    "status": "Active",
+    "user": "DAR\\Yasmine.Mohamed",
+    "model": "Precision 5820 Tower",
+    "storage": "C: (249.7 GB free of 476 GB) | D: (293.2 GB free of 465.2 GB)",
+    "osVersion": "Microsoft Windows 11 Pro for Workstations",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": "⚠️ Hardware modified: RAM: 128 GB -> 64 GB"
+  },
+  {
+    "asset": "PC-4",
+    "ipAddress": "192.168.20.4",
+    "status": "Failed",
+    "hardwareAlert": null,
+    "aiReport": null
+  },
+  {
+    "asset": "PC-5",
+    "ipAddress": "192.168.20.5",
+    "status": "Failed",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "SERVER",
+    "ipAddress": "192.168.20.6",
+    "domain": "DAR.local",
+    "processor": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "ram": "32 GB",
+    "macAddress": "E0:D5:5E:F7:AF:85",
+    "vga": "Microsoft Basic Display Adapter",
+    "status": "Active",
+    "user": "N/A",
+    "model": "H370HD3",
+    "storage": "C: (106.8 GB free of 137 GB) | E: (15.5 GB free of 85 GB)",
+    "osVersion": "Microsoft Windows Server 2022 Standard",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "PC-10",
+    "ipAddress": "192.168.20.10",
+    "status": "Failed",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "PC-18",
+    "ipAddress": "192.168.20.18",
+    "status": "Failed",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "DAR-ID04",
+    "ipAddress": "192.168.20.40",
+    "domain": "DAR.local",
+    "processor": "2x Intel(R) Xeon(R) CPU E5-2697 v4 @ 2.30GHz",
+    "ram": "64 GB",
+    "macAddress": "48:4D:7E:D2:D1:36",
+    "vga": "NVIDIA GeForce RTX 3060 4 GB",
+    "status": "Active",
+    "user": "DAR\\Hager.Mohamed",
+    "model": "Precision Tower 7810",
+    "storage": "C: (214.1 GB free of 464.8 GB) | D: (771.7 GB free of 931.5 GB)",
+    "osVersion": "Microsoft Windows 11 Pro for Workstations",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "PC-42",
+    "ipAddress": "192.168.20.42",
+    "status": "Failed",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "DAR-D07",
+    "ipAddress": "192.168.20.43",
+    "domain": "DAR.local",
+    "processor": "2x Intel(R) Xeon(R) Gold 6138 CPU @ 2.00GHz",
+    "ram": "64 GB",
+    "macAddress": "6C:2B:59:E9:3F:F6",
+    "vga": "NVIDIA GeForce RTX 3050 4 GB",
+    "status": "Active",
+    "user": "DAR\\Mohamed.Magdy",
+    "model": "Precision 7820 Tower",
+    "storage": "C: (32.5 GB free of 476 GB) | D: (846 GB free of 931.5 GB)",
+    "osVersion": "Microsoft Windows 11 Pro",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "DAR-LS01",
+    "ipAddress": "192.168.20.44",
+    "domain": "DAR.local",
+    "processor": "Intel(R) Xeon(R) W-2133 CPU @ 3.60GHz",
+    "ram": "64 GB",
+    "macAddress": "A4:AE:11:18:17:C2",
+    "vga": "NVIDIA GeForce RTX 3050 4 GB",
+    "status": "Active",
+    "user": "DAR\\Ganna.Adel",
+    "model": "30BFS4GK0A",
+    "storage": "C: (270.2 GB free of 464.7 GB) | D: (895.7 GB free of 931.5 GB)",
+    "osVersion": "Microsoft Windows 11 Pro for Workstations",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  },
+  {
+    "asset": "PC-46",
+    "ipAddress": "192.168.20.46",
+    "status": "Failed",
+    "aiReport": {
+      "status": "ok",
+      "message": "AI Analysis temporary unavailable",
+      "recommendation": "N/A"
+    },
+    "hardwareAlert": null
+  }
+]
