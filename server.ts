@@ -396,17 +396,18 @@ let activeCreds: any = null;
                           // Successfully pinged the IP
                           let pcName = `PC-${ip.replace(/\./g, '-')}`;
                           
-                          const addToDb = (name: string) => {
+                          const addToDb = (name: string, domainName?: string) => {
                               const existingIndex = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
                               
                               if (existingIndex !== -1) {
                                   assetsDatabase[existingIndex].status = "Active";
                                   assetsDatabase[existingIndex].asset = name;
+                                  if (domainName && domainName !== 'LOCAL.Network') assetsDatabase[existingIndex].domain = domainName;
                               } else {
                                   assetsDatabase.push({
                                       asset: name,
                                       ipAddress: ip,
-                                      domain: "LOCAL.Network",
+                                      domain: domainName || "LOCAL.Network",
                                       status: "Active",
                                       processor: "N/A",
                                       ram: "N/A",
@@ -428,7 +429,10 @@ let activeCreds: any = null;
                           dns.reverse(ip, (err: any, hostnames: any) => {
                               if (!err && hostnames && hostnames.length > 0) {
                                   pcName = hostnames[0].split('.')[0].toUpperCase();
-                                  addToDb(pcName);
+                                  const parts = hostnames[0].split('.');
+                                  let dom = parts.length > 1 ? parts.slice(1).join('.').toUpperCase() : "WORKGROUP";
+                                  
+                                  addToDb(pcName, dom);
                                   saveDatabase();
                               }
                           });
@@ -474,7 +478,7 @@ let activeCreds: any = null;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb"
+                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)"
                                 } catch {
                                     Write-Output "WMI_ERROR|$($_.Exception.Message)"
                                 }
@@ -495,12 +499,16 @@ let activeCreds: any = null;
                                               const osMatch = stdout.match(/OS:(.*?)\|/i);
                                               const modelMatch = stdout.match(/Model:(.*?)\|/i);
                                               const userMatch = stdout.match(/User:(.*?)\|/i);
-                                              const ramMatch = stdout.match(/RAM:(.*?)$/m) || stdout.match(/RAM:(.*?)\r/i);
+                                              const nameMatch = stdout.match(/Name:(.*?)\|/i);
+                                              const domainMatch = stdout.match(/Domain:(.*?)$/m) || stdout.match(/Domain:(.*?)\r/i);
+                                              const ramMatch = stdout.match(/RAM:(.*?)\|/i);
                                               
                                               if (cpuMatch && cpuMatch[1].trim()) asset.processor = cpuMatch[1].trim();
                                               if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
                                               if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
                                               if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
+                                              if (nameMatch && nameMatch[1].trim()) asset.asset = nameMatch[1].trim();
+                                              if (domainMatch && domainMatch[1].trim()) asset.domain = domainMatch[1].trim().toUpperCase();
                                               if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
                                           }
                                           saveDatabase();

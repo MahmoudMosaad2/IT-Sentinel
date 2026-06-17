@@ -2821,12 +2821,14 @@
           });
           document.getElementById("domainBody").innerHTML = Object.keys(summary)
             .map(
-              (d) =>
-                `<tr>
+              (d) => {
+                const escapedDom = d.replace(/'/g, "\\'");
+                return `<tr onclick="filterByDomain('${escapedDom}')" style="cursor: pointer;" class="domain-row">
                         <td class="text-start text-truncate" style="font-size: 11.5px; font-weight: 500;" title="${d}">${d}</td>
                         <td class="text-center align-middle" style="width: 32px;"><span class="badge-active d-inline-block text-center" style="font-size: 11px;">${summary[d].active}</span></td>
                         <td class="text-center align-middle" style="width: 32px;"><span class="badge-failed d-inline-block text-center" style="font-size: 11px;">${summary[d].failed}</span></td>
-                    </tr>`,
+                    </tr>`;
+              }
             )
             .join("");
 
@@ -2851,12 +2853,33 @@
         }
       }
 
+      function filterByDomain(domain) {
+        currentFilter = "Domain:" + domain;
+        
+        // Highlight active domain card
+        document.querySelectorAll('.domain-row').forEach(c => {
+          c.style.backgroundColor = (c.innerHTML.includes(` title="${domain}"`)) ? '#eef2ff' : '';
+        });
+        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+        
+        // Update header if applicable
+        const tableArea = document.querySelector('.card-header h5');
+        if (tableArea) {
+           tableArea.innerHTML = currentLang === 'ar' ? `<i class="fa fa-sitemap ms-1"></i> أجهزة شبكة ${domain}` : `<i class="fa fa-sitemap me-1"></i> Devices in ${domain}`;
+        }
+        
+        renderTable();
+      }
+
       function renderTable() {
         let dataToRender = [...currentData];
 
         // Apply quick filter / stats card filter
         if (currentFilter !== "All") {
-          if (currentFilter === "Active") {
+          if (currentFilter.startsWith("Domain:")) {
+            const tgtDomain = currentFilter.split(":")[1];
+            dataToRender = dataToRender.filter((a) => (a.domain || "Workgroup") === tgtDomain);
+          } else if (currentFilter === "Active") {
             dataToRender = dataToRender.filter((a) => a.status === "Active");
           } else if (currentFilter === "Offline") {
             dataToRender = dataToRender.filter(
@@ -5065,6 +5088,16 @@
       let currentFilter = "All";
       function setQuickFilter(filter) {
         currentFilter = filter;
+        
+        // Remove active state from domain rows if a global filter is applied
+        document.querySelectorAll('.domain-row').forEach(c => {
+          c.style.backgroundColor = '';
+        });
+        
+        const tableArea = document.querySelector('.card-header h5');
+        if (tableArea && !currentFilter.startsWith("Domain:")) {
+           tableArea.innerHTML = currentLang === 'ar' ? `<i class="fa fa-desktop text-indigo ms-1"></i> الأجهزة المتوفرة` : `<i class="fa fa-desktop text-indigo me-1"></i> Available Asset List`;
+        }
 
         // Toggle highlight classes on specific custom badge elements
         const badges = {
