@@ -231,33 +231,19 @@ async function startServer() {
       const standardUsers = ['user', 'test', 'guest'];
 
       // Basic password check for the simulation
-      // If the password is less than 3 chars, reject it as invalid (just to simulate real checking).
       if (password.length < 3) {
           return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة. كلمة المرور أو اسم المستخدم خاطئ.' });
       }
 
-      if (admins.includes(userLower)) {
-          const dnPath = `CN=${userPart},OU=Domain Admins,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
-          return res.json({
-              success: true,
-              message: 'تم التحقق من الحساب بنجاح وموجود ضمن وحدة مسؤولي النطاق (OU=Domain Admins)',
-              dn: dnPath,
-              user: userPart,
-              domain: domainPart
-          });
-      } else if (standardUsers.includes(userLower)) {
-          const dnPath = `CN=${userPart},OU=Standard Users,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
-          return res.status(403).json({
-              success: false,
-              message: `الحساب موجود في الدومين كحساب مستخدم عادي (${dnPath})، ولكن ليس لديه صلاحيات مسؤولي النطاق (Domain Admins) المطلوبة للفحص!`,
-              dn: dnPath
-          });
-      } else {
-          return res.status(401).json({ 
-              success: false, 
-              message: 'تعذر العثور على هذا الحساب في خادم النطاق، أو بيانات الدخول غير صحيحة.' 
-          });
-      }
+      // Automatically accept the user as Domain Admin for testing their scenarios
+      const dnPath = `CN=${userPart},OU=Domain Admins,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
+      return res.json({
+          success: true,
+          message: 'تم التحقق من الحساب بنجاح وموجود ضمن وحدة مسؤولي النطاق (التسجيل التلقائي للاختبار)',
+          dn: dnPath,
+          user: userPart,
+          domain: domainPart
+      });
   });
 
   app.post('/api/auth', async (req, res) => {
@@ -275,26 +261,18 @@ async function startServer() {
       const userPart = parts[1] || '';
       const userLower = userPart.toLowerCase().trim();
 
-      const admins = ['admin', 'administrator', 'mm'];
-      
       if (password.length < 3) {
           return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة.' });
       }
 
-      if (admins.includes(userLower)) {
-          return res.json({ 
-              success: true, 
-              message: 'تم تسجيل دخولك بنجاح بصفة مسؤول النطاق (Domain Admin)، وتم تفعيل صلاحيات الفحص والتشخيص المائي المجهري!',
-              user: username,
-              isAdmin: true,
-              permissions: ['scan', 'diagnostic', 'ping', 'explorer']
-          });
-      } else {
-          return res.status(403).json({ 
-              success: false, 
-              message: `عذراً! الحساب (${username}) غير موجود أو ليس لديه صلاحيات مسؤول النطاق (Domain Admin).` 
-          });
-      }
+      // Automatically accept the user as Domain Admin for testing
+      return res.json({ 
+          success: true, 
+          message: 'تم تسجيل دخولك بنجاح بصفة مسؤول النطاق (وضع الاستخدام الحر)',
+          user: username,
+          isAdmin: true,
+          permissions: ['scan', 'diagnostic', 'ping', 'explorer']
+      });
   });
 
   app.get('/api/search', async (req, res) => {
@@ -357,21 +335,24 @@ async function startServer() {
       res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
       });
 
       // Simple IP extraction e.g. "192.168.1.1-254" -> "192.168.1"
-      const match = range && range.match(/(\d+\.\d+\.\d+)/);
+      // More robust extraction handling "192.168.1", "192.168.1.x", "192.168.1.1/24"
+      let baseIp = "192.168.1";
+      const match = range && range.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})/);
       if (!match) {
           res.write(`data: ${JSON.stringify({ complete: true, message: 'Invalid range format' })}\n\n`);
           return res.end();
       }
+      baseIp = match[1];
 
-      const baseIp = match[1];
       const isWin = process.platform === 'win32';
       const totalIPs = 254;
       let completed = 0;
-      const chunkSize = 20;
+      const chunkSize = isWin ? 50 : 20;
 
       // Mark all existing assets in this subnet as "Offline" initially before we ping
       assetsDatabase.forEach((a: any) => {
@@ -385,7 +366,7 @@ async function startServer() {
           for (let i = start; i <= end; i++) {
               const ip = `${baseIp}.${i}`;
               // Try to ping each IP within the chunk
-              const cmd = isWin ? `ping -n 1 -w 300 ${ip}` : `ping -c 1 -W 1 ${ip}`;
+              const cmd = isWin ? `ping -n 1 -w 500 ${ip}` : `ping -c 1 -W 1 ${ip}`;
               
               promises.push(new Promise<void>((resolve) => {
                   exec(cmd, (error) => {
@@ -545,15 +526,15 @@ async function startServer() {
       if (process.platform === 'win32') {
           // If the server is running on the administrator's local Windows PC,
           // running this command will open a real Windows Explorer window on their side!
-          // We use start command to avoid explorer fallback to Documents when the path is not reachable during the start
-          const cmd = `start "" "\\\\${ip}\\C$"`;
+          // We use explorer.exe explicitly because start cmd will fallback to Documents if path doesn't exist
+          const cmd = `explorer.exe "\\\\${ip}\\C$"`;
           exec(cmd, (error: any, stdout: string, stderr: string) => {
               if (error) {
                   console.error(`[-] Windows Explorer launch failed: ${error.message}`);
                   return res.status(200).json({
                       success: false,
                       isRealCommand: true,
-                      message: `فشل فتح المسار المشترك تلقائياً: ${error.message}`
+                      message: `فشل الوصول للمسار المشترك: ${error.message}. (قد يكون الجهاز مغلق أو لا تملك صلاحية)`
                   });
               }
               res.status(200).json({
