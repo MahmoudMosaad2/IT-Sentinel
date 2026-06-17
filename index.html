@@ -2660,46 +2660,46 @@
         progressBar.style.width = "0%";
         progressBar.innerText = "0%";
 
-        // Simulate progress filling
-        const interval = setInterval(() => {
-          progress += Math.floor(Math.random() * 15) + 5;
-          if (progress > 90) progress = 90; // hold before API call completes
-          progressBar.style.width = progress + "%";
-          progressBar.innerText = progress + "%";
-        }, 300);
+        const eventSource = new EventSource(`/api/scan?range=${encodeURIComponent(range)}`);
 
-        try {
-          const res = await fetch("/api/scan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ range }),
-          });
-          const data = await res.json();
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.progress !== undefined) {
+                progressBar.style.width = data.progress + "%";
+                progressBar.innerText = data.progress + "%";
+            }
+            
+            if (data.complete) {
+                eventSource.close();
+                progressBar.style.width = "100%";
+                progressBar.innerText = "100%";
+                progressBar.classList.replace("bg-info", "bg-success");
+                
+                setTimeout(() => {
+                    progressContainer.style.display = "none";
+                    btn.style.display = "block";
+                    progressBar.classList.replace("bg-success", "bg-info");
+                    progressBar.style.width = "0%";
+                    const msgEl = document.getElementById("scanMsg");
+                    msgEl.innerText = "Scan completed successfully";
+                    msgEl.className = "text-success text-center fw-bold mt-1";
+                    setTimeout(() => (msgEl.innerText = ""), 5000);
+                    load(1); // Reload data table with new devices
+                }, 1000);
+            }
+        };
 
-          // Finish progress
-          clearInterval(interval);
-          progressBar.style.width = "100%";
-          progressBar.innerText = "100%";
-          progressBar.classList.replace("bg-info", "bg-success");
-
-          setTimeout(() => {
+        eventSource.onerror = function(err) {
+            console.error("EventSource failed:", err);
+            eventSource.close();
             progressContainer.style.display = "none";
             btn.style.display = "block";
-            progressBar.classList.replace("bg-success", "bg-info");
-            progressBar.style.width = "0%";
             const msgEl = document.getElementById("scanMsg");
-            msgEl.innerText = data.message || "Scan initiated";
-            msgEl.className = "text-success text-center fw-bold mt-1";
+            msgEl.innerText = "Failed";
+            msgEl.className = "text-danger text-center fw-bold mt-1";
             setTimeout(() => (msgEl.innerText = ""), 5000);
-          }, 1000);
-        } catch (e) {
-          clearInterval(interval);
-          progressContainer.style.display = "none";
-          btn.style.display = "block";
-          const msgEl = document.getElementById("scanMsg");
-          msgEl.innerText = "Failed";
-          msgEl.className = "text-danger text-center fw-bold mt-1";
-        }
+        };
       }
 
       function formatStorage(data) {

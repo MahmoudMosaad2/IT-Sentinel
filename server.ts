@@ -350,12 +350,105 @@ async function startServer() {
       res.json(matches);
   });
 
-  app.post('/api/scan', (req, res) => {
-      const { range } = req.body;
-      console.log(`Scan requested for range: ${range}`);
-      // NOTE: For full asset discovery, implement your administrative network sweep logic here (e.g., using WMI or SNMP polling).
-      // We return a simulated acknowledgment to represent the completed API request.
-      res.json({ success: true, message: `Scan request for ${range} sent.` });
+  app.get('/api/scan', async (req, res) => {
+      const range = req.query.range as string;
+      console.log(`Live Scan requested for range: ${range}`);
+
+      res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
+      });
+
+      // Simple IP extraction e.g. "192.168.1.1-254" -> "192.168.1"
+      const match = range && range.match(/(\d+\.\d+\.\d+)/);
+      if (!match) {
+          res.write(`data: ${JSON.stringify({ complete: true, message: 'Invalid range format' })}\n\n`);
+          return res.end();
+      }
+
+      const baseIp = match[1];
+      const isWin = process.platform === 'win32';
+      const totalIPs = 254;
+      let completed = 0;
+      const chunkSize = 20;
+
+      // Mark all existing assets in this subnet as "Offline" initially before we ping
+      assetsDatabase.forEach((a: any) => {
+          if (a.ipAddress.startsWith(baseIp + '.')) {
+              a.status = "Failed";
+          }
+      });
+
+      const runPingChunk = async (start: number, end: number) => {
+          const promises = [];
+          for (let i = start; i <= end; i++) {
+              const ip = `${baseIp}.${i}`;
+              // Try to ping each IP within the chunk
+              const cmd = isWin ? `ping -n 1 -w 300 ${ip}` : `ping -c 1 -W 1 ${ip}`;
+              
+              promises.push(new Promise<void>((resolve) => {
+                  exec(cmd, (error) => {
+                      completed++;
+                      if (!error) {
+                          // Successfully pinged the IP
+                          let pcName = `PC-${ip.replace(/\./g, '-')}`;
+                          
+                          const addToDb = (name: string) => {
+                              const existingIndex = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
+                              if (existingIndex !== -1) {
+                                  assetsDatabase[existingIndex].status = "Active";
+                                  assetsDatabase[existingIndex].asset = name;
+                              } else {
+                                  assetsDatabase.push({
+                                      asset: name,
+                                      ipAddress: ip,
+                                      domain: "LOCAL.Network",
+                                      processor: "N/A",
+                                      ram: "N/A",
+                                      macAddress: "00:00:00:00:00:00",
+                                      vga: "N/A",
+                                      status: "Active",
+                                      user: "N/A",
+                                      model: "N/A",
+                                      storage: "N/A",
+                                      osVersion: "N/A",
+                                      uptimeEn: "0D 0H",
+                                      uptimeAr: "0 يوم و 0 ساعة"
+                                  });
+                              }
+                          };
+                          
+                          addToDb(pcName);
+
+                          // Quick async DNS reverse lookup without dragging down the loop
+                          require('dns').reverse(ip, (err: any, hostnames: any) => {
+                              if (!err && hostnames && hostnames.length > 0) {
+                                  pcName = hostnames[0].split('.')[0].toUpperCase();
+                                  addToDb(pcName);
+                                  saveDatabase();
+                              }
+                          });
+                      }
+                      resolve();
+                  });
+              }));
+          }
+          await Promise.all(promises);
+      };
+
+      for (let i = 1; i <= totalIPs; i += chunkSize) {
+          const end = Math.min(i + chunkSize - 1, totalIPs);
+          await runPingChunk(i, end);
+          
+          // Stream progress back to the front-end
+          const percent = Math.floor((completed / totalIPs) * 100);
+          res.write(`data: ${JSON.stringify({ progress: percent })}\n\n`);
+      }
+
+      saveDatabase();
+      res.write(`data: ${JSON.stringify({ progress: 100, complete: true })}\n\n`);
+      res.end();
   });
 
   app.post('/api/assets', async (req, res) => {
@@ -421,16 +514,28 @@ async function startServer() {
       console.log(`[Action] Initiated real Ping execution for ${ip}`);
       
       const isWin = process.platform === 'win32';
-      const command = isWin ? `ping -n 4 ${ip}` : `ping -c 4 ${ip}`;
       
-      exec(command, (error: any, stdout: string, stderr: string) => {
-          const outputText = stdout || stderr || (error ? error.message : '');
-          res.status(200).json({
-              success: !error,
-              isRealCommand: true,
-              output: outputText
+      if (isWin) {
+          // Open a new CMD window running the continuous ping command
+          exec(`start cmd.exe /k "ping ${ip} -t"`, (error: any, stdout: string, stderr: string) => {
+              res.status(200).json({
+                  success: true,
+                  isRealCommand: true,
+                  output: `Opening CMD for continuous ping to ${ip}...`
+              });
           });
-      });
+      } else {
+          // For non-Windows environments just run the normal ping and return the output
+          const command = `ping -c 4 ${ip}`;
+          exec(command, (error: any, stdout: string, stderr: string) => {
+              const outputText = stdout || stderr || (error ? error.message : '');
+              res.status(200).json({
+                  success: !error,
+                  isRealCommand: true,
+                  output: outputText
+              });
+          });
+      }
   });
 
   app.get('/api/action/openc/:ip', (req, res) => {
@@ -439,15 +544,16 @@ async function startServer() {
       
       if (process.platform === 'win32') {
           // If the server is running on the administrator's local Windows PC,
-          // running this command will literally open a real Windows Explorer window on their side!
-          const cmd = `explorer.exe "\\\\${ip}\\C$"`;
+          // running this command will open a real Windows Explorer window on their side!
+          // We use start command to avoid explorer fallback to Documents when the path is not reachable during the start
+          const cmd = `start "" "\\\\${ip}\\C$"`;
           exec(cmd, (error: any, stdout: string, stderr: string) => {
               if (error) {
                   console.error(`[-] Windows Explorer launch failed: ${error.message}`);
                   return res.status(200).json({
                       success: false,
                       isRealCommand: true,
-                      message: `فشل فتح Windows Explorer تلقائياً: ${error.message}. يرجى استخدام أمر تشغيل Win + R كبديل.`
+                      message: `فشل فتح المسار المشترك تلقائياً: ${error.message}`
                   });
               }
               res.status(200).json({
