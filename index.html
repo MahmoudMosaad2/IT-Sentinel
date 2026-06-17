@@ -686,6 +686,15 @@
           >
             <i class="fa fa-search me-2"></i> Start Discover
           </button>
+          
+          <button
+            id="stopScanBtn"
+            class="btn btn-danger w-100 btn-sm text-white fw-bold mb-1 shadow-sm"
+            onclick="stopScan()"
+            style="border-radius: 6px; display: none;"
+          >
+            <i class="fa fa-stop me-2"></i> إيقاف الفحص
+          </button>
 
           <button
             class="btn btn-outline-light w-100 btn-sm mt-1 mb-1 border-opacity-25"
@@ -2698,13 +2707,13 @@
           bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
         modal.hide();
         
-        alert(isAr ? "تم إعدادات حساب المصادقة بنجاح وسيتم استخدامه في عمليات الفحص" : "Credential configuration saved and will be used in future scans.");
+        alert(currentLang === 'ar' ? "تم إعدادات حساب المصادقة بنجاح وسيتم استخدامه في عمليات الفحص" : "Credential configuration saved and will be used in future scans.");
       }
 
       async function startScan() {
         const range = document.getElementById("ipRange").value;
         if (!range) {
-          alert(isAr ? "يرجى إدخال نطاق الشبكة أولاً" : "Please enter IP range first");
+          alert(currentLang === 'ar' ? "يرجى إدخال نطاق الشبكة أولاً" : "Please enter IP range first");
           return;
         }
 
@@ -2726,17 +2735,18 @@
             const progressBar = document.getElementById("scanProgressBar");
 
             btn.style.display = "none";
+            document.getElementById("stopScanBtn").style.display = "block";
             progressContainer.style.display = "flex";
 
             let progress = 0;
             progressBar.style.width = "0%";
             progressBar.innerText = "0%";
 
-            const eventSource = new EventSource(
+            window.currentScanEventSource = new EventSource(
               `/api/scan?range=${encodeURIComponent(range)}`,
             );
 
-            eventSource.onmessage = function (event) {
+            window.currentScanEventSource.onmessage = function (event) {
               const data = JSON.parse(event.data);
 
               if (data.progress !== undefined) {
@@ -2745,7 +2755,7 @@
               }
 
               if (data.complete) {
-                eventSource.close();
+                window.currentScanEventSource.close();
                 progressBar.style.width = "100%";
                 progressBar.innerText = "100%";
                 progressBar.classList.replace("bg-info", "bg-success");
@@ -2753,10 +2763,11 @@
                 setTimeout(() => {
                   progressContainer.style.display = "none";
                   btn.style.display = "block";
+                  document.getElementById("stopScanBtn").style.display = "none";
                   progressBar.classList.replace("bg-success", "bg-info");
                   progressBar.style.width = "0%";
                   const msgEl = document.getElementById("scanMsg");
-                  msgEl.innerText = isAr ? "اكتمل الفحص بنجاح" : "Scan completed successfully";
+                  msgEl.innerText = currentLang === 'ar' ? "اكتمل الفحص بنجاح" : "Scan completed successfully";
                   msgEl.className = "text-success text-center fw-bold mt-1";
                   setTimeout(() => (msgEl.innerText = ""), 5000);
                   load(1); // Reload data table with new devices
@@ -2764,17 +2775,32 @@
               }
             };
 
-            eventSource.onerror = function (err) {
+            window.currentScanEventSource.onerror = function (err) {
               console.error("EventSource failed:", err);
-              eventSource.close();
+              window.currentScanEventSource.close();
               progressContainer.style.display = "none";
               btn.style.display = "block";
+              document.getElementById("stopScanBtn").style.display = "none";
               const msgEl = document.getElementById("scanMsg");
               msgEl.innerText = "Failed";
               msgEl.className = "text-danger text-center fw-bold mt-1";
               setTimeout(() => (msgEl.innerText = ""), 5000);
             };
         }).catch(console.error);
+      }
+
+      function stopScan() {
+        if (window.currentScanEventSource) {
+           window.currentScanEventSource.close();
+           const msgEl = document.getElementById("scanMsg");
+           msgEl.innerText = currentLang === 'ar' ? "تم إيقاف الفحص" : "Scan stopped";
+           msgEl.className = "text-warning text-center fw-bold mt-1";
+           setTimeout(() => (msgEl.innerText = ""), 5000);
+           
+           document.getElementById("scanProgressContainer").style.display = "none";
+           document.getElementById("startScanBtn").style.display = "block";
+           document.getElementById("stopScanBtn").style.display = "none";
+        }
       }
 
       function openCredsModal() {
@@ -2791,10 +2817,10 @@
       }
 
       function clearDatabase() {
-        if (!confirm(isAr ? "هل أنت متأكد من مسح جميع الأجهزة المحفوظة من الفحوصات السابقة؟" : "Are you sure you want to clear all devices history?")) return;
+        if (!confirm(currentLang === 'ar' ? "هل أنت متأكد من مسح جميع الأجهزة المحفوظة من الفحوصات السابقة؟" : "Are you sure you want to clear all devices history?")) return;
         fetch("/api/clear-db", { method: "POST" })
           .then(() => {
-            alert(isAr ? "تم المسح بنجاح" : "Cleared successfully");
+            alert(currentLang === 'ar' ? "تم المسح بنجاح" : "Cleared successfully");
             load(1);
           }).catch(console.error);
       }

@@ -385,6 +385,9 @@ let activeCreds: any = null;
       let completed = 0;
       const totalToScan = (endIpEnd - startIpEnd) + 1;
       const chunkSize = 5; // Reduced from 50 to 5 to prevent Powershell from melting the CPU
+      
+      let isCancelled = false;
+      req.on('close', () => { isCancelled = true; });
 
       // Mark all existing assets in this subnet as "Offline" initially before we ping
       assetsDatabase.forEach((a: any) => {
@@ -394,8 +397,12 @@ let activeCreds: any = null;
       });
 
       const runPingChunk = async (start: number, end: number) => {
+          if (isCancelled) return;
+          
           const promises = [];
           for (let i = start; i <= end; i++) {
+              if (isCancelled) break;
+              
               const ip = `${baseIp}.${i}`;
               // Try to ping each IP within the chunk
               const cmd = isWin ? `ping -n 1 -w 500 ${ip}` : `ping -c 1 -W 1 ${ip}`;
@@ -561,16 +568,20 @@ let activeCreds: any = null;
       };
 
       for (let i = startIpEnd; i <= endIpEnd; i += chunkSize) {
+          if (isCancelled) break;
           const end = Math.min(i + chunkSize - 1, endIpEnd);
           await runPingChunk(i, end);
           
+          if (isCancelled) break;
           // Stream progress back to the front-end
           const percent = Math.floor((completed / totalToScan) * 100);
           res.write(`data: ${JSON.stringify({ progress: Math.min(percent, 100) })}\n\n`);
       }
 
-      saveDatabase();
-      res.write(`data: ${JSON.stringify({ progress: 100, complete: true })}\n\n`);
+      if (!isCancelled) {
+          saveDatabase();
+          res.write(`data: ${JSON.stringify({ progress: 100, complete: true })}\n\n`);
+      }
       res.end();
   });
 
@@ -610,18 +621,20 @@ let activeCreds: any = null;
   });
 
   // Start local data fetch asynchronously without blocking
-  getLocalSystemData().then(localData => {
-      const existingIndex = assetsDatabase.findIndex((a: any) => a.asset === localData.asset || a.ipAddress === localData.ipAddress);
-      if (existingIndex !== -1) {
-          const existingData = assetsDatabase[existingIndex];
-          localData.hardwareAlert = existingData.hardwareAlert;
-          (localData as any).aiReport = existingData.aiReport || null;
-          assetsDatabase[existingIndex] = localData;
-      } else {
-          assetsDatabase.push(localData);
-      }
-      saveDatabase();
-  }).catch(e => console.error("Error init local data", e));
+  // Initialize local asset for this container/server
+  // We do not append the hosting container itself to the database to avoid confusion.
+  // getLocalSystemData().then(localData => {
+  //     const existingIndex = assetsDatabase.findIndex((a: any) => a.asset === localData.asset || a.ipAddress === localData.ipAddress);
+  //     if (existingIndex !== -1) {
+  //         const existingData = assetsDatabase[existingIndex];
+  //         localData.hardwareAlert = existingData.hardwareAlert;
+  //         (localData as any).aiReport = existingData.aiReport || null;
+  //         assetsDatabase[existingIndex] = localData;
+  //     } else {
+  //         assetsDatabase.push(localData);
+  //     }
+  //     saveDatabase();
+  // }).catch(e => console.error("Error init local data", e));
 
   app.post('/api/clear-db', (req, res) => {
       assetsDatabase = [];
