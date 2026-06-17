@@ -126,15 +126,15 @@ async function startServer() {
   if (!fs.existsSync(DB_FILE)) {
       const initialAssets = [
         {
-          "asset": "DAR-ARCH03",
+          "asset": "NET-ARCH03",
           "ipAddress": "192.168.20.3",
-          "domain": "DAR.local",
+          "domain": "NET.local",
           "processor": "Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz",
           "ram": "64 GB",
           "macAddress": "D8:9E:F3:34:C2:70",
           "vga": "NVIDIA GeForce RTX 3050 4 GB",
           "status": "Active",
-          "user": "DAR\\Yasmine.Mohamed",
+          "user": "NET\\Yasmine.Mohamed",
           "model": "Precision 5820 Tower",
           "storage": "C: (249.7 GB free of 476 GB) | D: (293.2 GB free of 465.2 GB)",
           "osVersion": "Microsoft Windows 11 Pro for Workstations",
@@ -210,7 +210,7 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
-  app.post('/api/check-creds', (req, res) => {
+  app.post('/api/check-creds', async (req, res) => {
       const { username, password } = req.body;
       
       if (!username || !password) {
@@ -226,28 +226,41 @@ async function startServer() {
       const userPart = parts[1] || '';
       const userLower = userPart.toLowerCase().trim();
 
-      const isApprovedAdmin = true;
+      // Simulated Active Directory accounts
+      const admins = ['admin', 'administrator', 'mm'];
+      const standardUsers = ['user', 'test', 'guest'];
 
-      if (isApprovedAdmin) {
+      // Basic password check for the simulation
+      // If the password is less than 3 chars, reject it as invalid (just to simulate real checking).
+      if (password.length < 3) {
+          return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة. كلمة المرور أو اسم المستخدم خاطئ.' });
+      }
+
+      if (admins.includes(userLower)) {
           const dnPath = `CN=${userPart},OU=Domain Admins,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
-          res.json({
+          return res.json({
               success: true,
               message: 'تم التحقق من الحساب بنجاح وموجود ضمن وحدة مسؤولي النطاق (OU=Domain Admins)',
               dn: dnPath,
               user: userPart,
               domain: domainPart
           });
-      } else {
+      } else if (standardUsers.includes(userLower)) {
           const dnPath = `CN=${userPart},OU=Standard Users,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
-          res.status(403).json({
+          return res.status(403).json({
               success: false,
               message: `الحساب موجود في الدومين كحساب مستخدم عادي (${dnPath})، ولكن ليس لديه صلاحيات مسؤولي النطاق (Domain Admins) المطلوبة للفحص!`,
               dn: dnPath
           });
+      } else {
+          return res.status(401).json({ 
+              success: false, 
+              message: 'تعذر العثور على هذا الحساب في خادم النطاق، أو بيانات الدخول غير صحيحة.' 
+          });
       }
   });
 
-  app.post('/api/auth', (req, res) => {
+  app.post('/api/auth', async (req, res) => {
       const { username, password } = req.body;
       
       if (!username || !password) {
@@ -262,10 +275,14 @@ async function startServer() {
       const userPart = parts[1] || '';
       const userLower = userPart.toLowerCase().trim();
 
-      const isApprovedAdmin = true;
+      const admins = ['admin', 'administrator', 'mm'];
+      
+      if (password.length < 3) {
+          return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة.' });
+      }
 
-      if (isApprovedAdmin) {
-          res.json({ 
+      if (admins.includes(userLower)) {
+          return res.json({ 
               success: true, 
               message: 'تم تسجيل دخولك بنجاح بصفة مسؤول النطاق (Domain Admin)، وتم تفعيل صلاحيات الفحص والتشخيص المائي المجهري!',
               user: username,
@@ -273,9 +290,9 @@ async function startServer() {
               permissions: ['scan', 'diagnostic', 'ping', 'explorer']
           });
       } else {
-          res.status(403).json({ 
+          return res.status(403).json({ 
               success: false, 
-              message: `عذراً! الحساب (${username}) ليس لديه صلاحيات مسؤول النطاق (Domain Admin). يرجى إدخال حساب أدمن معتمد للحصول على صلاحيات الفحص.` 
+              message: `عذراً! الحساب (${username}) غير موجود أو ليس لديه صلاحيات مسؤول النطاق (Domain Admin).` 
           });
       }
   });
@@ -392,7 +409,7 @@ async function startServer() {
           }
           saveDatabase();
           
-          res.json([localData]); // For the single machine view context
+          res.json(assetsDatabase); // Send all accumulated assets
       } catch (e) {
           console.error("Error getting local data:", e);
           res.json(assetsDatabase);

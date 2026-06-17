@@ -545,10 +545,10 @@
           >
             اسم الحساب:
             <code class="bg-white px-1.5 py-0.5 rounded border"
-              >DAR\Administrator</code
+              >Domain\Administrator</code
             >
             أو
-            <code class="bg-white px-1.5 py-0.5 rounded border">DAR\mosaad</code
+            <code class="bg-white px-1.5 py-0.5 rounded border">Domain\mm</code
             ><br />
             كلمة المرور:
             <code class="bg-white px-1.5 py-0.5 rounded border"
@@ -2055,7 +2055,7 @@
           login_desc:
             "يتكامل هذا البرنامج مع خوادم النطاق (Active Directory)؛ يرجى إدخال الحساب بصيغة الدومين للحصول على صلاحيات الفحص المجهري والتشخيص الكامل.",
           login_username_label: "اسم المستخدم بالنطاق (Domain\\User)",
-          login_username_placeholder: "مثال: DAR\\Administrator",
+          login_username_placeholder: "مثال: Domain\\Administrator",
           login_password_label: "كلمة المرور الخاصة بالحساب (Password)",
           login_password_placeholder: "••••••••",
           login_check_btn:
@@ -2067,7 +2067,7 @@
           login_demo_tip_title:
             '<i class="fa fa-circle-info text-info ms-1"></i> للتجربة السريعة كـ Admin:',
           login_demo_tip_body:
-            'اسم الحساب: <code class="bg-white px-1.5 py-0.5 rounded border">DAR\\Administrator</code> أو <code class="bg-white px-1.5 py-0.5 rounded border">DAR\\mosaad</code><br>كلمة المرور: <code class="bg-white px-1.5 py-0.5 rounded border">أي كلمة مرور</code>',
+            'اسم الحساب: <code class="bg-white px-1.5 py-0.5 rounded border">Domain\\Administrator</code> أو <code class="bg-white px-1.5 py-0.5 rounded border">Domain\\mm</code><br>كلمة المرور: <code class="bg-white px-1.5 py-0.5 rounded border">أي كلمة مرور</code>',
           login_check_success_alert: "✔ تم العثور على الحساب والمطابقة بنجاح!",
 
           lang_selector_label: "اللغة / Language",
@@ -2197,7 +2197,7 @@
           login_desc:
             "This console integrates securely with Domain controllers (Active Directory). Please enter credentials with domain prefix to enable diagnostic and remote tools.",
           login_username_label: "Domain Account Username (Domain\\User)",
-          login_username_placeholder: "e.g. DAR\\Administrator",
+          login_username_placeholder: "e.g. Domain\\Administrator",
           login_password_label: "Account Password (Password)",
           login_password_placeholder: "••••••••",
           login_check_btn:
@@ -2209,7 +2209,7 @@
           login_demo_tip_title:
             '<i class="fa fa-circle-info text-info me-1"></i> Quick Demo Admin Accounts:',
           login_demo_tip_body:
-            'Account Name: <code class="bg-white px-1.5 py-0.5 rounded border">DAR\\Administrator</code> or <code class="bg-white px-1.5 py-0.5 rounded border">DAR\\mosaad</code><br>Password: <code class="bg-white px-1.5 py-0.5 rounded border">Any code key</code>',
+            'Account Name: <code class="bg-white px-1.5 py-0.5 rounded border">Domain\\Administrator</code> or <code class="bg-white px-1.5 py-0.5 rounded border">Domain\\mm</code><br>Password: <code class="bg-white px-1.5 py-0.5 rounded border">Any code key</code>',
           login_check_success_alert:
             "✔ Account verified and matched successfully!",
 
@@ -2496,9 +2496,9 @@
             body: JSON.stringify({ username: u, password: p }),
           });
 
-          const data = await res.json();
+          const data = await res.json().catch(() => ({}));
 
-          if (data.success) {
+          if (res.ok && data.success) {
             // Show verified icons
             document
               .getElementById("usernameIconVerified")
@@ -2541,8 +2541,8 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: u, password: p }),
           });
-          const data = await res.json();
-          if (data.success) {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
             localStorage.setItem("it_sentinel_auth", "true");
             localStorage.setItem("it_sentinel_user", u);
             document.getElementById("loginError").style.display = "none";

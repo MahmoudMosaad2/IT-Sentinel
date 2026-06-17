@@ -1,14 +1,14 @@
 [
   {
-    "asset": "DAR-ARCH03",
+    "asset": "NET-ARCH03",
     "ipAddress": "192.168.20.3",
-    "domain": "DAR.local",
+    "domain": "NET.local",
     "processor": "Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz",
     "ram": "64 GB",
     "macAddress": "D8:9E:F3:34:C2:70",
     "vga": "NVIDIA GeForce RTX 3050 4 GB",
     "status": "Active",
-    "user": "DAR\\Yasmine.Mohamed",
+    "user": "NET\\Yasmine.Mohamed",
     "model": "Precision 5820 Tower",
     "storage": "C: (249.7 GB free of 476 GB) | D: (293.2 GB free of 465.2 GB)",
     "osVersion": "Microsoft Windows 11 Pro for Workstations",
@@ -17,7 +17,7 @@
       "message": "AI Analysis temporary unavailable",
       "recommendation": "N/A"
     },
-    "hardwareAlert": "⚠️ Hardware modified: RAM: 128 GB -> 64 GB"
+    "hardwareAlert": null
   },
   {
     "asset": "PC-4",
@@ -40,7 +40,7 @@
   {
     "asset": "SERVER",
     "ipAddress": "192.168.20.6",
-    "domain": "DAR.local",
+    "domain": "NET.local",
     "processor": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
     "ram": "32 GB",
     "macAddress": "E0:D5:5E:F7:AF:85",
@@ -80,15 +80,15 @@
     "hardwareAlert": null
   },
   {
-    "asset": "DAR-ID04",
+    "asset": "NET-ID04",
     "ipAddress": "192.168.20.40",
-    "domain": "DAR.local",
+    "domain": "NET.local",
     "processor": "2x Intel(R) Xeon(R) CPU E5-2697 v4 @ 2.30GHz",
     "ram": "64 GB",
     "macAddress": "48:4D:7E:D2:D1:36",
     "vga": "NVIDIA GeForce RTX 3060 4 GB",
     "status": "Active",
-    "user": "DAR\\Hager.Mohamed",
+    "user": "NET\\Hager.Mohamed",
     "model": "Precision Tower 7810",
     "storage": "C: (214.1 GB free of 464.8 GB) | D: (771.7 GB free of 931.5 GB)",
     "osVersion": "Microsoft Windows 11 Pro for Workstations",
@@ -111,15 +111,15 @@
     "hardwareAlert": null
   },
   {
-    "asset": "DAR-D07",
+    "asset": "NET-D07",
     "ipAddress": "192.168.20.43",
-    "domain": "DAR.local",
+    "domain": "NET.local",
     "processor": "2x Intel(R) Xeon(R) Gold 6138 CPU @ 2.00GHz",
     "ram": "64 GB",
     "macAddress": "6C:2B:59:E9:3F:F6",
     "vga": "NVIDIA GeForce RTX 3050 4 GB",
     "status": "Active",
-    "user": "DAR\\Mohamed.Magdy",
+    "user": "NET\\Mohamed.Magdy",
     "model": "Precision 7820 Tower",
     "storage": "C: (32.5 GB free of 476 GB) | D: (846 GB free of 931.5 GB)",
     "osVersion": "Microsoft Windows 11 Pro",
@@ -131,15 +131,15 @@
     "hardwareAlert": null
   },
   {
-    "asset": "DAR-LS01",
+    "asset": "NET-LS01",
     "ipAddress": "192.168.20.44",
-    "domain": "DAR.local",
+    "domain": "NET.local",
     "processor": "Intel(R) Xeon(R) W-2133 CPU @ 3.60GHz",
     "ram": "64 GB",
     "macAddress": "A4:AE:11:18:17:C2",
     "vga": "NVIDIA GeForce RTX 3050 4 GB",
     "status": "Active",
-    "user": "DAR\\Ganna.Adel",
+    "user": "NET\\Ganna.Adel",
     "model": "30BFS4GK0A",
     "storage": "C: (270.2 GB free of 464.7 GB) | D: (895.7 GB free of 931.5 GB)",
     "osVersion": "Microsoft Windows 11 Pro for Workstations",
@@ -160,5 +160,144 @@
       "recommendation": "N/A"
     },
     "hardwareAlert": null
+  },
+  {
+    "asset": "localhost",
+    "ipAddress": "169.254.8.1",
+    "domain": "LOCAL.network",
+    "processor": "unknown AMD @ 0GHz",
+    "ram": "4 GB",
+    "macAddress": "00:00:00:00:00:00",
+    "vga": "Integrated Graphics",
+    "status": "Active",
+    "user": "localhost\\Admin",
+    "model": "Server Node",
+    "storage": "/: (8589934591.5 GB free of 8589934592.0 GB) | /dev: (8589934592.0 GB free of 8589934592.0 GB) | /tmp: (8589934592.0 GB free of 8589934592.0 GB)",
+    "osVersion": "Ubuntu 12",
+    "hardwareAlert": null,
+    "uptimeEn": "0D 19H",
+    "uptimeAr": "0 يوم و 19 ساعة",
+    "lastBootStrEn": "Jun 16, 2026, 1:23 PM",
+    "lastBootStrAr": "١٦‏/٠٦‏/٢٠٢٦، ١:٢٣ م",
+    "smartData": [
+      {
+        "index": 0,
+        "model": "none",
+        "type": "overlay",
+        "health": 100,
+        "temp": "32°C",
+        "powerHours": 20,
+        "powerCycles": 15,
+        "tbw": "85899345.9",
+        "badSectors": 0,
+        "status": "Excellent",
+        "statusAr": "ممتازة",
+        "color": "#10b981",
+        "free": "8589934591.5",
+        "total": "8589934592.0"
+      },
+      {
+        "index": 1,
+        "model": "none",
+        "type": "overlay",
+        "health": 100,
+        "temp": "33°C",
+        "powerHours": 20,
+        "powerCycles": 15,
+        "tbw": "85899345.9",
+        "badSectors": 0,
+        "status": "Excellent",
+        "statusAr": "ممتازة",
+        "color": "#10b981",
+        "free": "8589934592.0",
+        "total": "8589934592.0"
+      },
+      {
+        "index": 2,
+        "model": "none",
+        "type": "overlay",
+        "health": 100,
+        "temp": "34°C",
+        "powerHours": 20,
+        "powerCycles": 15,
+        "tbw": "85899345.9",
+        "badSectors": 0,
+        "status": "Excellent",
+        "statusAr": "ممتازة",
+        "color": "#10b981",
+        "free": "8589934592.0",
+        "total": "8589934592.0"
+      }
+    ],
+    "processesData": [
+      {
+        "name": "start.sh",
+        "pid": 1,
+        "cpu": null,
+        "ram": "3.74 MB",
+        "desc": "start.sh"
+      },
+      {
+        "name": "nginx",
+        "pid": 5,
+        "cpu": null,
+        "ram": "11.70 MB",
+        "desc": "nginx"
+      },
+      {
+        "name": "control-plane-api",
+        "pid": 6,
+        "cpu": null,
+        "ram": "31.68 MB",
+        "desc": "control-plane-api"
+      },
+      {
+        "name": "tail",
+        "pid": 14,
+        "cpu": null,
+        "ram": "2.43 MB",
+        "desc": "tail"
+      },
+      {
+        "name": "nginx",
+        "pid": 15,
+        "cpu": null,
+        "ram": "12.56 MB",
+        "desc": "nginx"
+      },
+      {
+        "name": "nginx",
+        "pid": 16,
+        "cpu": null,
+        "ram": "12.73 MB",
+        "desc": "nginx"
+      },
+      {
+        "name": "npm",
+        "pid": 65,
+        "cpu": null,
+        "ram": "0 MB",
+        "desc": "npm run dev --p] <defunct>"
+      }
+    ],
+    "servicesData": [
+      {
+        "name": "spooler",
+        "display": "Print Spooler",
+        "status": "Running",
+        "descAr": "إدارة عمليات الطباعة",
+        "descEn": "Print Spooler",
+        "canRestart": true
+      },
+      {
+        "name": "wuauserv",
+        "display": "Windows Update",
+        "status": "Running",
+        "descAr": "خدمة التحديثات",
+        "descEn": "Windows Update",
+        "canRestart": true
+      }
+    ],
+    "aiReport": null
   }
 ]
