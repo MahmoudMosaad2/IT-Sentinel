@@ -397,17 +397,23 @@ let activeCreds: any = null;
                           let pcName = `PC-${ip.replace(/\./g, '-')}`;
                           
                           const addToDb = (name: string, domainName?: string) => {
+                              let cleanDomain = (domainName || "WORKGROUP").toUpperCase().trim();
+                              cleanDomain = cleanDomain.split('.')[0];
+                              if (cleanDomain === 'LOCAL' || cleanDomain === 'NET') {
+                                  cleanDomain = 'WORKGROUP';
+                              }
+
                               const existingIndex = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
                               
                               if (existingIndex !== -1) {
                                   assetsDatabase[existingIndex].status = "Active";
                                   assetsDatabase[existingIndex].asset = name;
-                                  if (domainName && domainName !== 'LOCAL.Network') assetsDatabase[existingIndex].domain = domainName;
+                                  if (domainName) assetsDatabase[existingIndex].domain = cleanDomain;
                               } else {
                                   assetsDatabase.push({
                                       asset: name,
                                       ipAddress: ip,
-                                      domain: domainName || "LOCAL.Network",
+                                      domain: cleanDomain,
                                       status: "Active",
                                       processor: "N/A",
                                       ram: "N/A",
@@ -430,7 +436,7 @@ let activeCreds: any = null;
                               if (!err && hostnames && hostnames.length > 0) {
                                   pcName = hostnames[0].split('.')[0].toUpperCase();
                                   const parts = hostnames[0].split('.');
-                                  let dom = parts.length > 1 ? parts.slice(1).join('.').toUpperCase() : "WORKGROUP";
+                                  let dom = parts.length > 1 ? parts[1].toUpperCase() : "WORKGROUP";
                                   
                                   addToDb(pcName, dom);
                                   saveDatabase();
@@ -478,8 +484,8 @@ let activeCreds: any = null;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    $gpu = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController | Select-Object -First 1).Name;
-                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "$($_.DeviceID)|$([math]::Round($_.Size / 1GB))" };
+                                    $gpu = ((Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController).Name) -join ", ";
+                                    $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Model)|$([math]::Round($_.Size / 1GB))" };
                                     $diskStr = $disks -join ";";
                                     
                                     Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb|Name:$($cs.Name)|Domain:$($cs.Domain)|GPU:$gpu|Storage:$diskStr"
@@ -515,15 +521,19 @@ let activeCreds: any = null;
                                               if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
                                               if (nameMatch && nameMatch[1].trim()) asset.asset = nameMatch[1].trim();
                                               if (domainMatch && domainMatch[1].trim()) {
-                                                  asset.domain = domainMatch[1].trim().split('.')[0].toUpperCase();
+                                                  let dM = domainMatch[1].trim().split('.')[0].toUpperCase();
+                                                  if (dM === 'LOCAL' || dM === 'NET') dM = 'WORKGROUP';
+                                                  asset.domain = dM;
                                               }
                                               if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
                                               if (gpuMatch && gpuMatch[1].trim()) asset.vga = gpuMatch[1].trim();
                                               if (storageMatch && storageMatch[1].trim()) {
                                                   asset.storage = storageMatch[1].trim().split(';').map((d: string) => {
                                                       const pts = d.split('|');
-                                                      return { drive: pts[0] || 'C:', capacity: parseInt(pts[1]) || 0 };
-                                                  });
+                                                      let cap = parseInt(pts[1]);
+                                                      if (isNaN(cap)) cap = 0;
+                                                      return { drive: pts[0] || 'Unknown Disk', capacity: cap };
+                                                  }).filter((s: any) => s.capacity > 0);
                                               }
                                           }
                                           saveDatabase();
