@@ -656,6 +656,9 @@
               data-i18n-placeholder="sidebar_ip_range_placeholder"
               placeholder="192.168.1.1-254"
             />
+            <button class="btn btn-outline-light border-opacity-50" onclick="openCredsModal()" title="إعدادات المصادقة للشبكة">
+              <i class="fa fa-key"></i>
+            </button>
           </div>
           <div
             id="scanProgressContainer"
@@ -683,7 +686,23 @@
           >
             <i class="fa fa-search me-2"></i> Start Discover
           </button>
-          
+
+          <button
+            class="btn btn-outline-light w-100 btn-sm mt-1 mb-1 border-opacity-25"
+            onclick="showScriptModal()"
+            style="border-radius: 6px; font-size: 11px"
+          >
+            <i class="fa fa-terminal ms-1"></i> تحميل بيانات الأجهزة (بدون WMI)
+          </button>
+
+          <button
+            class="btn btn-outline-danger w-100 btn-sm mt-1 mb-1 border-opacity-25"
+            onclick="clearDatabase()"
+            style="border-radius: 6px; font-size: 11px"
+          >
+            <i class="fa fa-trash ms-1"></i> مسح السجل السابق للشبكة
+          </button>
+
           <div
             id="scanMsg"
             class="text-warning text-center fw-bold mt-1"
@@ -2498,10 +2517,14 @@
           });
 
           if (!res.ok) {
-              const text = await res.text().catch(()=>"");
-              let msg = "";
-              try { msg = JSON.parse(text).message; } catch(e) {}
-              throw new Error(msg || "يرجى التحقق من صحة البيانات أو صلاحيات الحساب.");
+            const text = await res.text().catch(() => "");
+            let msg = "";
+            try {
+              msg = JSON.parse(text).message;
+            } catch (e) {}
+            throw new Error(
+              msg || "يرجى التحقق من صحة البيانات أو صلاحيات الحساب.",
+            );
           }
 
           const data = await res.json().catch(() => ({}));
@@ -2530,8 +2553,7 @@
           }
         } catch (e) {
           resetCheckState();
-          errAlert.innerText =
-            "فشل الاتصال: " + e.message;
+          errAlert.innerText = "فشل الاتصال: " + e.message;
           errAlert.style.display = "block";
         } finally {
           checkBtnIcon.className = "fa fa-magnifying-glass-shield me-1";
@@ -2549,12 +2571,14 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: u, password: p }),
           });
-          
+
           if (!res.ok) {
-              const text = await res.text().catch(()=>"");
-              let msg = "";
-              try { msg = JSON.parse(text).message; } catch(e) {}
-              throw new Error(msg || "تأكد من صحة الحساب وصلاحياته.");
+            const text = await res.text().catch(() => "");
+            let msg = "";
+            try {
+              msg = JSON.parse(text).message;
+            } catch (e) {}
+            throw new Error(msg || "تأكد من صحة الحساب وصلاحياته.");
           }
 
           const data = await res.json().catch(() => ({}));
@@ -2656,91 +2680,153 @@
         checkAuth();
       }
 
+      function confirmScanCreds() {
+        const username = document.getElementById("wmiUsername").value;
+        const password = document.getElementById("wmiPassword").value;
+
+        // Save to auto-fill next time
+        if (username) {
+          localStorage.setItem("it_sentinel_wmi_user", username);
+          localStorage.setItem("it_sentinel_wmi_pass", password);
+        } else {
+          localStorage.removeItem("it_sentinel_wmi_user");
+          localStorage.removeItem("it_sentinel_wmi_pass");
+        }
+
+        const modalEl = document.getElementById("scanCredsModal");
+        const modal =
+          bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.hide();
+        
+        alert(isAr ? "تم إعدادات حساب المصادقة بنجاح وسيتم استخدامه في عمليات الفحص" : "Credential configuration saved and will be used in future scans.");
+      }
+
       async function startScan() {
         const range = document.getElementById("ipRange").value;
-        if (!range) return;
+        if (!range) {
+          alert(isAr ? "يرجى إدخال نطاق الشبكة أولاً" : "Please enter IP range first");
+          return;
+        }
 
-        // Add scan audit entry
-        addAuditLog("scan", `Scan requested for range: ${range}`);
+        const username = localStorage.getItem("it_sentinel_wmi_user") || "";
+        const password = localStorage.getItem("it_sentinel_wmi_pass") || "";
+        
+        // Push current credentials to the backend before scan
+        fetch("/api/check-scan-creds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        }).then(() => {
+            addAuditLog("scan", `Scan requested for range: ${range}`);
 
-        const btn = document.getElementById("startScanBtn");
-        const progressContainer = document.getElementById(
-          "scanProgressContainer",
-        );
-        const progressBar = document.getElementById("scanProgressBar");
+            const btn = document.getElementById("startScanBtn");
+            const progressContainer = document.getElementById(
+              "scanProgressContainer",
+            );
+            const progressBar = document.getElementById("scanProgressBar");
 
-        btn.style.display = "none";
-        progressContainer.style.display = "flex";
+            btn.style.display = "none";
+            progressContainer.style.display = "flex";
 
-        let progress = 0;
-        progressBar.style.width = "0%";
-        progressBar.innerText = "0%";
+            let progress = 0;
+            progressBar.style.width = "0%";
+            progressBar.innerText = "0%";
 
-        const eventSource = new EventSource(`/api/scan?range=${encodeURIComponent(range)}`);
+            const eventSource = new EventSource(
+              `/api/scan?range=${encodeURIComponent(range)}`,
+            );
 
-        eventSource.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            
-            if (data.progress !== undefined) {
+            eventSource.onmessage = function (event) {
+              const data = JSON.parse(event.data);
+
+              if (data.progress !== undefined) {
                 progressBar.style.width = data.progress + "%";
                 progressBar.innerText = data.progress + "%";
-            }
-            
-            if (data.complete) {
+              }
+
+              if (data.complete) {
                 eventSource.close();
                 progressBar.style.width = "100%";
                 progressBar.innerText = "100%";
                 progressBar.classList.replace("bg-info", "bg-success");
-                
-                setTimeout(() => {
-                    progressContainer.style.display = "none";
-                    btn.style.display = "block";
-                    progressBar.classList.replace("bg-success", "bg-info");
-                    progressBar.style.width = "0%";
-                    const msgEl = document.getElementById("scanMsg");
-                    msgEl.innerText = "Scan completed successfully";
-                    msgEl.className = "text-success text-center fw-bold mt-1";
-                    setTimeout(() => (msgEl.innerText = ""), 5000);
-                    load(1); // Reload data table with new devices
-                }, 1000);
-            }
-        };
 
-        eventSource.onerror = function(err) {
-            console.error("EventSource failed:", err);
-            eventSource.close();
-            progressContainer.style.display = "none";
-            btn.style.display = "block";
-            const msgEl = document.getElementById("scanMsg");
-            msgEl.innerText = "Failed";
-            msgEl.className = "text-danger text-center fw-bold mt-1";
-            setTimeout(() => (msgEl.innerText = ""), 5000);
-        };
+                setTimeout(() => {
+                  progressContainer.style.display = "none";
+                  btn.style.display = "block";
+                  progressBar.classList.replace("bg-success", "bg-info");
+                  progressBar.style.width = "0%";
+                  const msgEl = document.getElementById("scanMsg");
+                  msgEl.innerText = isAr ? "اكتمل الفحص بنجاح" : "Scan completed successfully";
+                  msgEl.className = "text-success text-center fw-bold mt-1";
+                  setTimeout(() => (msgEl.innerText = ""), 5000);
+                  load(1); // Reload data table with new devices
+                }, 1000);
+              }
+            };
+
+            eventSource.onerror = function (err) {
+              console.error("EventSource failed:", err);
+              eventSource.close();
+              progressContainer.style.display = "none";
+              btn.style.display = "block";
+              const msgEl = document.getElementById("scanMsg");
+              msgEl.innerText = "Failed";
+              msgEl.className = "text-danger text-center fw-bold mt-1";
+              setTimeout(() => (msgEl.innerText = ""), 5000);
+            };
+        }).catch(console.error);
+      }
+
+      function openCredsModal() {
+        const savedUser = localStorage.getItem("it_sentinel_wmi_user");
+        if (savedUser) {
+          document.getElementById("wmiUsername").value = savedUser;
+          document.getElementById("wmiPassword").value =
+            localStorage.getItem("it_sentinel_wmi_pass") || "";
+        }
+        const modal = new bootstrap.Modal(
+          document.getElementById("scanCredsModal"),
+        );
+        modal.show();
+      }
+
+      function clearDatabase() {
+        if (!confirm(isAr ? "هل أنت متأكد من مسح جميع الأجهزة المحفوظة من الفحوصات السابقة؟" : "Are you sure you want to clear all devices history?")) return;
+        fetch("/api/clear-db", { method: "POST" })
+          .then(() => {
+            alert(isAr ? "تم المسح بنجاح" : "Cleared successfully");
+            load(1);
+          }).catch(console.error);
       }
 
       function formatStorage(data) {
         if (Array.isArray(data))
-          return data.map((s) => {
-            const size = s.total || s.capacity || 0;
-            const label = s.drive || s.model || "";
-            return `${label ? label + " " : ""}${size} GB`.trim();
-          }).join(" + ");
-        if (typeof data === "string") {
-          if (
-            data.toLowerCase().includes("ssd") ||
-            data.toLowerCase().includes("hdd")
-          ) {
-            return data;
-          }
-          let parts = data.split("|");
-          return parts
-            .map((part, index) => {
-              let matches = part.match(/([0-9]+\.[0-9]+|[0-9]+)/g);
-              let total = matches ? matches[matches.length - 1] : null;
-              if (total) {
-                return index === 0 ? `SSD ${total} GB` : `HDD ${total} GB`;
+          return data
+            .map((s) => {
+              const size = s.total || s.capacity || s.free || 0; // fallback to anything resembling size
+              let label = s.drive || s.model || s.label || "";
+              if (label.indexOf("NVMe") !== -1 || label.indexOf("SSD") !== -1) {
+                // leave it as is if it has SSD or NVMe
               }
-              return part.trim();
+              return `${label ? label + " " : ""}${size} GB`.trim();
+            })
+            .join(" + ");
+        if (typeof data === "string") {
+          // New Format from Win32_DiskDrive: "Model|1024;Model2|500"
+          let diskEntries = data.split(";");
+          return diskEntries
+            .map((entry) => {
+              let pieces = entry.split("|");
+              if (pieces.length === 2) {
+                return `${pieces[0].trim()} (${pieces[1].trim()} GB)`;
+              }
+              // old format fallback
+              let matches = entry.match(/([0-9]+\.[0-9]+|[0-9]+)/g);
+              let total = matches ? matches[matches.length - 1] : null;
+              if (total && entry.toUpperCase().includes("C:")) {
+                return `Drive ${entry.split(" ")[0]} ${total} GB`;
+              }
+              return entry.trim();
             })
             .join(" + ");
         }
@@ -2825,16 +2911,14 @@
               : summary[dom].failed++;
           });
           document.getElementById("domainBody").innerHTML = Object.keys(summary)
-            .map(
-              (d) => {
-                const escapedDom = d.replace(/'/g, "\\'");
-                return `<tr onclick="filterByDomain('${escapedDom}')" style="cursor: pointer;" class="domain-row">
+            .map((d) => {
+              const escapedDom = d.replace(/'/g, "\\'");
+              return `<tr onclick="filterByDomain('${escapedDom}')" style="cursor: pointer;" class="domain-row">
                         <td class="text-start text-truncate" style="font-size: 11.5px; font-weight: 500;" title="${d}">${d}</td>
                         <td class="text-center align-middle" style="width: 32px;"><span class="badge-active d-inline-block text-center" style="font-size: 11px;">${summary[d].active}</span></td>
                         <td class="text-center align-middle" style="width: 32px;"><span class="badge-failed d-inline-block text-center" style="font-size: 11px;">${summary[d].failed}</span></td>
                     </tr>`;
-              }
-            )
+            })
             .join("");
 
           // Keep classification data synchronized with load updates
@@ -2860,19 +2944,26 @@
 
       function filterByDomain(domain) {
         currentFilter = "Domain:" + domain;
-        
+
         // Highlight active domain card
-        document.querySelectorAll('.domain-row').forEach(c => {
-          c.style.backgroundColor = (c.innerHTML.includes(` title="${domain}"`)) ? '#eef2ff' : '';
+        document.querySelectorAll(".domain-row").forEach((c) => {
+          c.style.backgroundColor = c.innerHTML.includes(` title="${domain}"`)
+            ? "#eef2ff"
+            : "";
         });
-        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-        
+        document
+          .querySelectorAll(".stat-card")
+          .forEach((c) => c.classList.remove("active"));
+
         // Update header if applicable
-        const tableArea = document.querySelector('.card-header h5');
+        const tableArea = document.querySelector(".card-header h5");
         if (tableArea) {
-           tableArea.innerHTML = currentLang === 'ar' ? `<i class="fa fa-sitemap ms-1"></i> أجهزة شبكة ${domain}` : `<i class="fa fa-sitemap me-1"></i> Devices in ${domain}`;
+          tableArea.innerHTML =
+            currentLang === "ar"
+              ? `<i class="fa fa-sitemap ms-1"></i> أجهزة شبكة ${domain}`
+              : `<i class="fa fa-sitemap me-1"></i> Devices in ${domain}`;
         }
-        
+
         renderTable();
       }
 
@@ -2883,7 +2974,9 @@
         if (currentFilter !== "All") {
           if (currentFilter.startsWith("Domain:")) {
             const tgtDomain = currentFilter.split(":")[1];
-            dataToRender = dataToRender.filter((a) => (a.domain || "Workgroup") === tgtDomain);
+            dataToRender = dataToRender.filter(
+              (a) => (a.domain || "Workgroup") === tgtDomain,
+            );
           } else if (currentFilter === "Active") {
             dataToRender = dataToRender.filter((a) => a.status === "Active");
           } else if (currentFilter === "Offline") {
@@ -3149,14 +3242,18 @@
               /([A-Z]:).*?([\d.]+)\s*(GB|GiB|MB|TB|TiB|MiB).*?([\d.]+)\s*(GB|GiB|MB|TB|TiB|MiB)/i,
             );
             if (match) {
-              return { drive: match[1], free: parseFloat(match[2]), total: parseFloat(match[4]) };
+              return {
+                drive: match[1],
+                free: parseFloat(match[2]),
+                total: parseFloat(match[4]),
+              };
             }
             return { drive: part.trim() };
           });
         }
-        
+
         if (!Array.isArray(parsedStorage) || parsedStorage.length === 0) {
-           return []; // No real drives
+          return []; // No real drives
         }
 
         return parsedStorage.map((s, idx) => {
@@ -3184,14 +3281,14 @@
             statusAr: statusAr,
             color: color,
             free: s.free,
-            total: s.total
+            total: s.total,
           };
         });
       }
 
       function getSmartHealthCardHTML(a) {
         const drives = getDriveHealthData(a);
-        
+
         const isAr = currentLang === "ar";
         const dir = isAr ? "rtl" : "ltr";
         const align = isAr ? "right" : "left";
@@ -3202,7 +3299,7 @@
         const ms1Me1Class = isAr ? "ms-1" : "me-1";
 
         if (!drives || drives.length === 0) {
-            return `<div class="rounded border bg-white shadow-xs p-3 text-center text-muted" style="direction: ${dir}; border-color: #ededed !important; min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          return `<div class="rounded border bg-white shadow-xs p-3 text-center text-muted" style="direction: ${dir}; border-color: #ededed !important; min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                 <i class="fa fa-hdd mb-2 fs-2 text-secondary opacity-25"></i>
                 <div class="fw-bold" style="font-size:12px;">${isAr ? "بيانات فحص الأقراص الذكية غير متوفرة" : "S.M.A.R.T diagnostic data unavailable"}</div>
             </div>`;
@@ -3218,30 +3315,35 @@
 
         let badSectorWarning1 = "";
         if (d1) {
-            if (d1.badSectors > 0) {
-              badSectorWarning1 = isAr
-                ? `<span class="text-danger fw-bold ms-1" style="font-size: 11px;"><i class="fa fa-triangle-exclamation ms-1 animate-pulse"></i>رصد قطاعات ميكانيكية تالفة (${d1.badSectors} Bad Sectors)! يرجى أخذ نسخة احتياطية فوراً.</span>`
-                : `<span class="text-danger fw-bold me-1" style="font-size: 11px;"><i class="fa fa-triangle-exclamation me-1 animate-pulse"></i>Mechanical bad sectors identified (${d1.badSectors} Bad Sectors)! Backup recommended.</span>`;
-            } else {
-              badSectorWarning1 = isAr
-                ? `<span class="text-success fw-bold ms-1" style="font-size: 11px;"><i class="fa fa-circle-check ms-1"></i>جميع القطاعات سليمة (0 Bad Sectors)</span>`
-                : `<span class="text-success fw-bold me-1" style="font-size: 11px;"><i class="fa fa-circle-check me-1"></i>All magnetic sectors healthy (0 Bad Sectors)</span>`;
-            }
+          if (d1.badSectors > 0) {
+            badSectorWarning1 = isAr
+              ? `<span class="text-danger fw-bold ms-1" style="font-size: 11px;"><i class="fa fa-triangle-exclamation ms-1 animate-pulse"></i>رصد قطاعات ميكانيكية تالفة (${d1.badSectors} Bad Sectors)! يرجى أخذ نسخة احتياطية فوراً.</span>`
+              : `<span class="text-danger fw-bold me-1" style="font-size: 11px;"><i class="fa fa-triangle-exclamation me-1 animate-pulse"></i>Mechanical bad sectors identified (${d1.badSectors} Bad Sectors)! Backup recommended.</span>`;
+          } else {
+            badSectorWarning1 = isAr
+              ? `<span class="text-success fw-bold ms-1" style="font-size: 11px;"><i class="fa fa-circle-check ms-1"></i>جميع القطاعات سليمة (0 Bad Sectors)</span>`
+              : `<span class="text-success fw-bold me-1" style="font-size: 11px;"><i class="fa fa-circle-check me-1"></i>All magnetic sectors healthy (0 Bad Sectors)</span>`;
+          }
         }
 
-        let d0HealthBg = d0.health === "N/A" ? "bg-secondary" :
-          (d0.health < 80
-            ? "bg-warning"
-            : d0.health < 90
-              ? "bg-primary"
-              : "bg-success");
-              
-        let d1HealthBg = !d1 ? "bg-secondary" : (d1.health === "N/A" ? "bg-secondary" :
-          (d1.health < 60
-            ? "bg-danger"
-            : d1.health < 80
+        let d0HealthBg =
+          d0.health === "N/A"
+            ? "bg-secondary"
+            : d0.health < 80
               ? "bg-warning"
-              : "bg-primary"));
+              : d0.health < 90
+                ? "bg-primary"
+                : "bg-success";
+
+        let d1HealthBg = !d1
+          ? "bg-secondary"
+          : d1.health === "N/A"
+            ? "bg-secondary"
+            : d1.health < 60
+              ? "bg-danger"
+              : d1.health < 80
+                ? "bg-warning"
+                : "bg-primary";
 
         return `
                 <div class="rounded border ${isAr ? "text-right" : "text-left"} bg-white shadow-xs p-3" style="direction: ${dir}; text-align: ${align}; border-color: #ededed !important; min-height: 250px; display: flex; flex-direction: column;">
@@ -3253,11 +3355,15 @@
                             <button id="smart-btn-0" class="btn btn-sm flex-fill fw-bold py-2 rounded-2 transition-all border-0 bg-white shadow-sm text-primary" style="font-size: 11.5px;" onclick="switchSmartDisk(0)">
                                 <i class="fa fa-bolt ${ms1Me1Class} text-warning"></i> ${isAr ? "القرص 1" : "Drive 1"} 
                             </button>
-                            ${d1 ? `
+                            ${
+                              d1
+                                ? `
                             <button id="smart-btn-1" class="btn btn-sm flex-fill fw-bold py-2 rounded-2 transition-all border-0 text-muted" style="font-size: 11.5px;" onclick="switchSmartDisk(1)">
                                 <i class="fa fa-database ${ms1Me1Class} text-secondary"></i> ${isAr ? "القرص 2" : "Drive 2"}
                             </button>
-                            ` : ''}
+                            `
+                                : ""
+                            }
                         </div>
                     </div>
 
@@ -3335,7 +3441,9 @@
                         </div>
                     </div>
                     
-                    ${d1 ? `
+                    ${
+                      d1
+                        ? `
                     <!-- محتوى القرص الثاني -->
                     <div id="smart-panel-1" class="smart-panel transition-all" style="display: none;">
                         <div class="d-flex align-items-center justify-content-between gap-3 mb-3 flex-wrap">
@@ -3398,7 +3506,9 @@
                                 <i class="fa fa-terminal" style="font-size: 10px;"></i> ${isAr ? "فحص مجهري" : "Run scan"}
                             </button>
                         </div>
-                    </div>` : ''}
+                    </div>`
+                        : ""
+                    }
                 </div>
             `;
       }
@@ -3942,15 +4052,15 @@
 
       function initToolkit(a) {
         if (a && Array.isArray(a.processesData)) {
-            currentActiveProcesses = [...a.processesData];
+          currentActiveProcesses = [...a.processesData];
         } else {
-            currentActiveProcesses = [];
+          currentActiveProcesses = [];
         }
 
         if (a && Array.isArray(a.servicesData)) {
-            currentActiveServices = [...a.servicesData];
+          currentActiveServices = [...a.servicesData];
         } else {
-            currentActiveServices = [];
+          currentActiveServices = [];
         }
       }
 
@@ -4868,27 +4978,31 @@
         addAuditLog("folder-open", `Opened C$ share for ${ip}`);
 
         const isAr = currentLang === "ar";
-        
+
         // Trigger server-side background register and handle real-world local execution if active
         fetch(`/api/action/openc/${ip}`)
           .then((res) => res.json())
           .then((data) => {
-             const helper = document.getElementById("terminalHelperBox");
-             if (helper) {
-                helper.innerHTML = `
-                    <div class="alert alert-success mt-3" style="direction: ${isAr ? 'rtl' : 'ltr'}; text-align: ${isAr ? 'right' : 'left'};">
+            const helper = document.getElementById("terminalHelperBox");
+            if (helper) {
+              helper.innerHTML = `
+                    <div class="alert alert-success mt-3" style="direction: ${isAr ? "rtl" : "ltr"}; text-align: ${isAr ? "right" : "left"};">
                         <i class="fa fa-folder-open me-2 ms-2"></i> ${data.message}
                     </div>
                 `;
-                helper.style.display = "block";
-                helper.scrollIntoView({ behavior: "smooth" });
-             } else {
-                alert(data.message);
-             }
+              helper.style.display = "block";
+              helper.scrollIntoView({ behavior: "smooth" });
+            } else {
+              alert(data.message);
+            }
           })
           .catch((e) => {
-             console.error(e);
-             alert(isAr ? "فشل الاتصال بالخادم الداخلي" : "Failed to connect to internal server");
+            console.error(e);
+            alert(
+              isAr
+                ? "فشل الاتصال بالخادم الداخلي"
+                : "Failed to connect to internal server",
+            );
           });
       }
 
@@ -5093,15 +5207,18 @@
       let currentFilter = "All";
       function setQuickFilter(filter) {
         currentFilter = filter;
-        
+
         // Remove active state from domain rows if a global filter is applied
-        document.querySelectorAll('.domain-row').forEach(c => {
-          c.style.backgroundColor = '';
+        document.querySelectorAll(".domain-row").forEach((c) => {
+          c.style.backgroundColor = "";
         });
-        
-        const tableArea = document.querySelector('.card-header h5');
+
+        const tableArea = document.querySelector(".card-header h5");
         if (tableArea && !currentFilter.startsWith("Domain:")) {
-           tableArea.innerHTML = currentLang === 'ar' ? `<i class="fa fa-desktop text-indigo ms-1"></i> الأجهزة المتوفرة` : `<i class="fa fa-desktop text-indigo me-1"></i> Available Asset List`;
+          tableArea.innerHTML =
+            currentLang === "ar"
+              ? `<i class="fa fa-desktop text-indigo ms-1"></i> الأجهزة المتوفرة`
+              : `<i class="fa fa-desktop text-indigo me-1"></i> Available Asset List`;
         }
 
         // Toggle highlight classes on specific custom badge elements
@@ -6216,6 +6333,70 @@
         XLSX.writeFile(wb, "IT_Assets_Report.xlsx");
       }
 
+      function showScriptModal() {
+        const protocol = window.location.protocol;
+        const host = window.location.host || "localhost:3000";
+
+        const scriptCode = `$serverUrl = "${protocol}//${host}/api/assets"
+
+try {
+    $cpu = (Get-WmiObject Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1).Name
+    $os = (Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue | Select-Object -First 1).Caption
+    $cs = Get-WmiObject Win32_ComputerSystem -ErrorAction SilentlyContinue | Select-Object -First 1
+    $mem = Get-WmiObject Win32_PhysicalMemory -ErrorAction SilentlyContinue | Measure-Object -Property Capacity -Sum
+    $ramGb = [math]::Round($mem.Sum / 1GB)
+    $net = Get-WmiObject Win32_NetworkAdapterConfiguration -ErrorAction SilentlyContinue | Where-Object {$_.IPEnabled -eq $true} | Select-Object -First 1
+    $gpu = (Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1).Name
+    
+    $disks = Get-WmiObject Win32_DiskDrive -ErrorAction SilentlyContinue
+    $storageArray = @()
+    foreach ($disk in $disks) {
+        $storageArray += @{
+            model = $disk.Model
+            capacity = [math]::Round($disk.Size / 1GB)
+        }
+    }
+    
+    $domainPart = $cs.Domain
+    if ($domainPart -match "^([^\.]+)") { $domainPart = $matches[1].ToUpper() }
+    
+    $bodyObj = @{
+        asset = $cs.Name
+        domain = $domainPart
+        ipAddress = $net.IPAddress[0]
+        macAddress = $net.MACAddress
+        processor = $cpu
+        ram = "$ramGb GB"
+        vga = $gpu
+        storage = $storageArray
+        osVersion = $os
+        model = $cs.Model
+        user = $env:USERNAME
+        status = "Active"
+    }
+    
+    $body = $bodyObj | ConvertTo-Json
+    Invoke-RestMethod -Uri $serverUrl -Method Post -Body $body -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
+} catch {}`;
+
+        document.getElementById("psScriptCode").innerText = scriptCode;
+        const modal = new bootstrap.Modal(
+          document.getElementById("scriptModal"),
+        );
+        modal.show();
+      }
+
+      function copyScript() {
+        navigator.clipboard.writeText(
+          document.getElementById("psScriptCode").innerText,
+        );
+        alert(
+          currentLang === "ar"
+            ? "تم نسخ الكود بنجاح!"
+            : "Script copied to clipboard!",
+        );
+      }
+
       // Initialize App
       setLanguage(currentLang);
       checkAuth();
@@ -6231,5 +6412,104 @@
         });
       });
     </script>
+
+    <!-- Scan Credentials Modal -->
+    <div class="modal fade" id="scanCredsModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content text-start_dir" style="direction: rtl">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title fw-bold text-dark">
+              <i class="fa fa-key text-primary ms-2 me-2"></i> بيانات فحص ويندوز
+              WMI
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body mt-2">
+            <p class="text-muted mb-3" style="font-size: 13px">
+              للحصول على بيانات المعالج والهارد، يجب توفير حساب صلاحياته Admin
+              على أجهزة الدومين. (اتركه خالي في حالة استخدام الحساب الحالي)
+            </p>
+            <div class="mb-3">
+              <label class="form-label" style="font-size: 13px"
+                >حساب الأدمن (مثال: DOMAIN\Administrator)</label
+              >
+              <input
+                type="text"
+                id="wmiUsername"
+                class="form-control form-control-sm text-start"
+                dir="ltr"
+                placeholder="DOMAIN\User"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label" style="font-size: 13px"
+                >كلمة المرور</label
+              >
+              <input
+                type="password"
+                id="wmiPassword"
+                class="form-control form-control-sm text-start"
+                dir="ltr"
+              />
+            </div>
+            <button
+              class="btn btn-primary w-100 btn-sm mt-2 fw-bold shadow-sm"
+              onclick="confirmScanCreds()"
+            >
+              حفظ بيانات المصادقة
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logon Script Modal for WMI Alternative -->
+    <div class="modal fade" id="scriptModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold text-dark">
+              <i class="fa fa-terminal me-2 text-primary"></i> جمع بيانات
+              الأجهزة دون الحاجة لـ WMI أو جدار الحماية
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body pb-0 text-end" style="direction: rtl">
+            <p class="text-muted" style="font-size: 14px">
+              نظراً لأن جدار الحماية (Firewall) في الويندوز يمنع عمليات فحص
+              <code>WMI</code> تلقائياً ويُظهر رسالة (Access Denied / RPC Server
+              Unavailable)، يمكنك بكل بساطة تخطي هذه المشكلة عبر إضافة حزمة
+              الفحص التلقائية التالية كـ <b>Logon Script</b> في الدومين بوليسي
+              <b>Active Directory Group Policy</b>.<br /><br />
+              كل جهاز في الشبكة سيقوم بإرسال بياناته بنفسه للخادم دون أي تدخل
+              منك وبدون إعدادات للفايروول.
+            </p>
+            <div
+              class="p-3 bg-dark text-light rounded-3 position-relative mb-3"
+            >
+              <button
+                class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2"
+                onclick="copyScript()"
+                style="font-size: 11px"
+              >
+                <i class="fa fa-copy me-1"></i> نسخ الكود
+              </button>
+              <pre
+                class="m-0 text-start"
+                style="direction: ltr; font-size: 12.5px; overflow-x: auto"
+              ><code id="psScriptCode"></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

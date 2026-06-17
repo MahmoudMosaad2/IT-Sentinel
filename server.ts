@@ -213,6 +213,17 @@ async function startServer() {
   // API Routes
 let activeCreds: any = null;
 
+  app.post('/api/check-scan-creds', (req, res) => {
+      const { username, password } = req.body;
+      if (username) {
+          const parts = username.split('\\');
+          const domainPart = parts.length > 1 ? parts[0] : '';
+          const userPart = parts.length > 1 ? parts[1] : username;
+          activeCreds = { domain: domainPart, user: userPart, password: password || '' };
+      }
+      res.json({ success: true });
+  });
+
   app.post('/api/check-creds', async (req, res) => {
       const { username, password } = req.body;
       
@@ -373,7 +384,7 @@ let activeCreds: any = null;
       const totalIPsLocal = endIpEnd;
       let completed = 0;
       const totalToScan = (endIpEnd - startIpEnd) + 1;
-      const chunkSize = isWin ? 50 : 20;
+      const chunkSize = 5; // Reduced from 50 to 5 to prevent Powershell from melting the CPU
 
       // Mark all existing assets in this subnet as "Offline" initially before we ping
       assetsDatabase.forEach((a: any) => {
@@ -399,7 +410,7 @@ let activeCreds: any = null;
                           const addToDb = (name: string, domainName?: string) => {
                               let cleanDomain = (domainName || "WORKGROUP").toUpperCase().trim();
                               cleanDomain = cleanDomain.split('.')[0];
-                              if (cleanDomain === 'LOCAL' || cleanDomain === 'NET') {
+                              if (cleanDomain === 'LOCAL' || cleanDomain === 'HOME') {
                                   cleanDomain = 'WORKGROUP';
                               }
 
@@ -522,7 +533,7 @@ let activeCreds: any = null;
                                               if (nameMatch && nameMatch[1].trim()) asset.asset = nameMatch[1].trim();
                                               if (domainMatch && domainMatch[1].trim()) {
                                                   let dM = domainMatch[1].trim().split('.')[0].toUpperCase();
-                                                  if (dM === 'LOCAL' || dM === 'NET') dM = 'WORKGROUP';
+                                                  if (dM === 'LOCAL' || dM === 'HOME') dM = 'WORKGROUP';
                                                   asset.domain = dM;
                                               }
                                               if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
@@ -598,26 +609,32 @@ let activeCreds: any = null;
       res.status(200).json({ message: "Success", aiReport: incomingData.aiReport });
   });
 
+  // Start local data fetch asynchronously without blocking
+  getLocalSystemData().then(localData => {
+      const existingIndex = assetsDatabase.findIndex((a: any) => a.asset === localData.asset || a.ipAddress === localData.ipAddress);
+      if (existingIndex !== -1) {
+          const existingData = assetsDatabase[existingIndex];
+          localData.hardwareAlert = existingData.hardwareAlert;
+          (localData as any).aiReport = existingData.aiReport || null;
+          assetsDatabase[existingIndex] = localData;
+      } else {
+          assetsDatabase.push(localData);
+      }
+      saveDatabase();
+  }).catch(e => console.error("Error init local data", e));
+
+  app.post('/api/clear-db', (req, res) => {
+      assetsDatabase = [];
+      saveDatabase();
+      res.json({ success: true });
+  });
+
   app.get('/api/data', async (req, res) => {
       try {
-          const localData = await getLocalSystemData();
-          
-          // Merge local data with existing database to keep AI reports
-          const existingIndex = assetsDatabase.findIndex((a: any) => a.asset === localData.asset || a.ipAddress === localData.ipAddress);
-          if (existingIndex !== -1) {
-              const existingData = assetsDatabase[existingIndex];
-              localData.hardwareAlert = existingData.hardwareAlert;
-              (localData as any).aiReport = existingData.aiReport || null;
-              assetsDatabase[existingIndex] = localData;
-          } else {
-              assetsDatabase.push(localData);
-          }
-          saveDatabase();
-          
           res.json(assetsDatabase); // Send all accumulated assets
       } catch (e) {
           console.error("Error getting local data:", e);
-          res.json(assetsDatabase);
+          res.status(500).json([]);
       }
   });
 
