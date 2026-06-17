@@ -502,7 +502,7 @@ let activeCreds: any = null;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
-                                    $gpuList = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" } | ForEach-Object { if ($_.AdapterRAM) { "$($_.Name) ($([math]::Round($_.AdapterRAM / 1GB, 2)) GB)" } else { $_.Name } };
+                                    $gpuList = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" } | Select-Object -ExpandProperty Name;
                                     $gpu = $gpuList -join ", ";
                                     $disks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object { "$($_.DeviceID) ($([math]::Round($_.FreeSpace / 1GB, 1)) GB free of $([math]::Round($_.Size / 1GB, 1)) GB)" };
                                     $diskStr = $disks -join " | ";
@@ -546,14 +546,7 @@ let activeCreds: any = null;
                                               }
                                               if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
                                               if (gpuMatch && gpuMatch[1].trim()) asset.vga = gpuMatch[1].trim();
-                                              if (storageMatch && storageMatch[1].trim()) {
-                                                  asset.storage = storageMatch[1].trim().split(';').map((d: string) => {
-                                                      const pts = d.split('|');
-                                                      let cap = parseInt(pts[1]);
-                                                      if (isNaN(cap)) cap = 0;
-                                                      return { drive: pts[0] || 'Unknown Disk', capacity: cap };
-                                                  }).filter((s: any) => s.capacity > 0);
-                                              }
+                                              if (storageMatch && storageMatch[1].trim()) asset.storage = storageMatch[1].trim();
                                           }
                                           saveDatabase();
                                       }

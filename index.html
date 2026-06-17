@@ -2714,6 +2714,14 @@
               resEl.style.display = "block";
               return;
           }
+          
+          const ipParts = ip.split('.');
+          if (ipParts.length !== 4 || ipParts.some(p => isNaN(p) || p < 0 || p > 255 || p === '')) {
+              resEl.innerText = currentLang === 'ar' ? "الـ IP غير صحيح (الأرقام يجب أن تكون بين 0 و 255)" : "Invalid IP address bounds";
+              resEl.className = "mt-2 text-center text-danger";
+              resEl.style.display = "block";
+              return;
+          }
 
           document.getElementById("testWmiBtn").disabled = true;
           resEl.innerText = "جاري الفحص...";
@@ -3323,10 +3331,11 @@
           let tbw = "N/A";
           let badSectors = 0;
           let color = "#6b7280";
+          let totalCap = s.total || s.capacity || 0;
 
           return {
             index: idx,
-            model: "Drive " + (s.drive || idx),
+            model: "Drive " + (s.drive || s.model || idx),
             type: "Disk",
             health: health,
             temp: temp,
@@ -3337,8 +3346,8 @@
             status: status,
             statusAr: statusAr,
             color: color,
-            free: s.free,
-            total: s.total,
+            free: s.free || 0,
+            total: totalCap,
           };
         });
       }
@@ -3751,8 +3760,17 @@
           ? '<div class="d-flex flex-column gap-2">' +
             parsedStorage
               .map((s) => {
-                if (!s.usePc && s.total == 0)
-                  return `<div class="mb-1 text-dark" style="font-size: 13px;"><i class="fa fa-hard-drive opacity-75 ms-1 me-1" style="color: #95a5a6;"></i><b>${s.drive}</b></div>`;
+                const isLegacy = s.capacity !== undefined && s.total === undefined;
+                const driveName = s.drive || s.model || 'Disk';
+                const totalCap = s.total || s.capacity || 0;
+
+                if (!s.usePc && totalCap == 0)
+                  return `<div class="mb-1 text-dark" style="font-size: 13px;"><i class="fa fa-hard-drive opacity-75 ms-1 me-1" style="color: #95a5a6;"></i><b>${driveName}</b></div>`;
+                
+                if (isLegacy) {
+                  return `<div class="mb-1 text-dark" style="font-size: 13px;"><i class="fa fa-hard-drive opacity-75 ms-1 me-1" style="color: #95a5a6;"></i><b>${driveName}</b> <span class="text-muted ms-1">(${s.capacity} GB)</span></div>`;
+                }
+
                 const typeStr = s.type
                   ? ` <span class="text-muted fw-normal ms-1" style="font-size: 11px;">(${s.type})</span>`
                   : "";
@@ -3772,7 +3790,7 @@
                             <strong class="me-1">${s.drive}</strong>${typeStr}
                         </div>
                         <span style="font-size: 11px; color: #495057; font-family: monospace;">
-                            ${currentLang === "ar" ? `حرّ: ${s.free}${s.freeUnit || "GB"} / الكلي: ${s.total}${s.totalUnit || "GB"} (${Math.round(s.usePc)}%)` : `${s.free}${s.freeUnit || "GB"} / ${s.total}${s.totalUnit || "GB"} (${Math.round(s.usePc)}%)`}
+                            ${currentLang === "ar" ? `حرّ: ${s.free}${s.freeUnit || "GB"} / الكلي: ${s.total}${s.totalUnit || "GB"} (${Math.round(s.usePc || 0)}%)` : `${s.free}${s.freeUnit || "GB"} / ${s.total}${s.totalUnit || "GB"} (${Math.round(s.usePc || 0)}%)`}
                         </span>
                     </div>
                     <div class="rounded-1 overflow-hidden" style="width: 100%; height: 8px; background-color: #e9ecef; border: 1px solid #dee2e6; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
