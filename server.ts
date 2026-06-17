@@ -501,96 +501,97 @@ let activeCreds: any = null;
                               }
 
                               const psCmd = `
+                                $ErrorActionPreference = 'SilentlyContinue';
+                                ${credInjection}
+                                
+                                $cpu = ""; $os = ""; $model = ""; $user = ""; $ramGb = ""; $name = ""; $domain = ""; $gpu = ""; $diskStr = "";
+                                
                                 try {
-                                    $ErrorActionPreference = 'SilentlyContinue';
-                                    ${credInjection}
-                                    
-                                    $cpu = ""; $os = ""; $model = ""; $user = ""; $ramGb = ""; $name = ""; $domain = ""; $gpu = ""; $diskStr = "";
-                                    
-                                    $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1
+                                    $cpuObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor -ErrorAction Stop | Select-Object -First 1
                                     if ($cpuObj) { $cpu = $cpuObj.Name }
-
-                                    $osObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1
-                                    if ($osObj) { $os = $osObj.Caption }
-
-                                    $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1
-                                    if ($cs) {
-                                        $model = $cs.Model
-                                        $user = $cs.UserName
-                                        $name = $cs.Name
-                                        $domain = $cs.Domain
-                                    }
-
-                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum
-                                    if ($mem -and $mem.Sum) {
-                                        $ramGb = [math]::Round($mem.Sum / 1GB)
-                                    }
-                                    
-                                    $gpus = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" }
-                                    $gpuList = @()
-                                    if ($gpus) {
-                                        foreach ($g in $gpus) {
-                                            if ($g.AdapterRAM) { 
-                                                $gb = [math]::Round($g.AdapterRAM / 1GB, 1)
-                                                if ($gb -ge 4) {
-                                                    $gpuList += "$($g.Name) ($gb GB or more)"
-                                                } else {
-                                                    $gpuList += "$($g.Name) ($gb GB)"
-                                                }
-                                            } else { 
-                                                $gpuList += $g.Name 
-                                            }
-                                        }
-                                    }
-                                    $gpu = $gpuList -join ", "
-
-                                    $storageList = @()
-                                    
-                                    $lDisks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3"
-                                    
-                                    $pDisksStr = ""
-                                    try {
-                                        $pDisks = Get-WmiObject -ComputerName ${ip} ${credParam} -Namespace "root\\Microsoft\\Windows\\Storage" -Class MSFT_PhysicalDisk -ErrorAction Stop
-                                        $pdList = @()
-                                        if ($pDisks) {
-                                            foreach ($pd in $pDisks) {
-                                                $type = "HDD"
-                                                if ($pd.MediaType -eq 4) { $type = "SSD" }
-                                                elseif ($pd.MediaType -eq 3) { $type = "HDD" }
-                                                $size = [math]::Round($pd.Size / 1GB, 1)
-                                                $pdList += "$($pd.FriendlyName) ($type) - $size GB"
-                                            }
-                                            $pDisksStr = $pdList -join " | "
-                                        }
-                                    } catch {}
-
-                                    if ($pDisksStr -ne "") {
-                                        if ($lDisks) {
-                                            foreach ($ld in $lDisks) {
-                                                $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
-                                            }
-                                        }
-                                        $diskStr = "$pDisksStr | " + ($storageList -join " | ")
-                                    } else {
-                                        $dDs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive
-                                        if ($dDs) {
-                                            foreach ($dd in $dDs) {
-                                                $size = [math]::Round($dd.Size / 1GB, 1)
-                                                $storageList += "$($dd.Model) - $size GB"
-                                            }
-                                        }
-                                        if ($lDisks) {
-                                            foreach ($ld in $lDisks) {
-                                                $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
-                                            }
-                                        }
-                                        $diskStr = $storageList -join " | "
-                                    }
-                                    
-                                    Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$model|User:$user|RAM:$ramGb|Name:$name|Domain:$domain|GPU:$gpu|Storage:$diskStr"
                                 } catch {
                                     Write-Output "WMI_ERROR|$($_.Exception.Message)"
+                                    exit
                                 }
+
+                                $osObj = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1
+                                if ($osObj) { $os = $osObj.Caption }
+
+                                $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1
+                                if ($cs) {
+                                    $model = $cs.Model
+                                    $user = $cs.UserName
+                                    $name = $cs.Name
+                                    $domain = $cs.Domain
+                                }
+
+                                $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum
+                                if ($mem -and $mem.Sum) {
+                                    $ramGb = [math]::Round($mem.Sum / 1GB)
+                                }
+                                
+                                $gpus = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_VideoController | Where-Object { $_.Name -notmatch "Mirror|DameWare|Virtual|AnyDesk|Remote" }
+                                $gpuList = @()
+                                if ($gpus) {
+                                    foreach ($g in $gpus) {
+                                        if ($g.AdapterRAM) { 
+                                            $gb = [math]::Round($g.AdapterRAM / 1GB, 1)
+                                            if ($gb -ge 4) {
+                                                $gpuList += "$($g.Name) ($gb GB or more)"
+                                            } else {
+                                                $gpuList += "$($g.Name) ($gb GB)"
+                                            }
+                                        } else { 
+                                            $gpuList += $g.Name 
+                                        }
+                                    }
+                                }
+                                $gpu = $gpuList -join ", "
+
+                                $storageList = @()
+                                
+                                $lDisks = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_LogicalDisk -Filter "DriveType=3"
+                                
+                                $pDisksStr = ""
+                                try {
+                                    $pDisks = Get-WmiObject -ComputerName ${ip} ${credParam} -Namespace "root\\Microsoft\\Windows\\Storage" -Class MSFT_PhysicalDisk -ErrorAction Stop
+                                    $pdList = @()
+                                    if ($pDisks) {
+                                        foreach ($pd in $pDisks) {
+                                            $type = "HDD"
+                                            if ($pd.MediaType -eq 4) { $type = "SSD" }
+                                            elseif ($pd.MediaType -eq 3) { $type = "HDD" }
+                                            $size = [math]::Round($pd.Size / 1GB, 1)
+                                            $pdList += "$($pd.FriendlyName) ($type) - $size GB"
+                                        }
+                                        $pDisksStr = $pdList -join " | "
+                                    }
+                                } catch {}
+
+                                if ($pDisksStr -ne "") {
+                                    if ($lDisks) {
+                                        foreach ($ld in $lDisks) {
+                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        }
+                                    }
+                                    $diskStr = "$pDisksStr | " + ($storageList -join " | ")
+                                } else {
+                                    $dDs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_DiskDrive
+                                    if ($dDs) {
+                                        foreach ($dd in $dDs) {
+                                            $size = [math]::Round($dd.Size / 1GB, 1)
+                                            $storageList += "$($dd.Model) - $size GB"
+                                        }
+                                    }
+                                    if ($lDisks) {
+                                        foreach ($ld in $lDisks) {
+                                            $storageList += "$($ld.DeviceID) ($([math]::Round($ld.FreeSpace / 1GB, 1)) GB free of $([math]::Round($ld.Size / 1GB, 1)) GB)"
+                                        }
+                                    }
+                                    $diskStr = $storageList -join " | "
+                                }
+                                
+                                Write-Output "SUCCESS|CPU:$cpu|OS:$os|Model:$model|User:$user|RAM:$ramGb|Name:$name|Domain:$domain|GPU:$gpu|Storage:$diskStr"
                               `;
                               const psCmdBase64 = Buffer.from(psCmd, 'utf16le').toString('base64');
 
