@@ -211,6 +211,8 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+let activeCreds: any = null;
+
   app.post('/api/check-creds', async (req, res) => {
       const { username, password } = req.body;
       
@@ -235,6 +237,8 @@ async function startServer() {
       if (password.length < 3) {
           return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة. كلمة المرور أو اسم المستخدم خاطئ.' });
       }
+
+      activeCreds = { domain: domainPart, user: userPart, password: password };
 
       // Automatically accept the user as Domain Admin for testing their scenarios
       const dnPath = `CN=${userPart},OU=Domain Admins,OU=Users,DC=${domainPart.toLowerCase()},DC=local`;
@@ -265,6 +269,8 @@ async function startServer() {
       if (password.length < 3) {
           return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة.' });
       }
+
+      activeCreds = { domain: parts[0], user: userPart, password: password };
 
       // Automatically accept the user as Domain Admin for testing
       return res.json({ 
@@ -340,19 +346,33 @@ async function startServer() {
           'X-Accel-Buffering': 'no'
       });
 
-      // Simple IP extraction e.g. "192.168.1.1-254" -> "192.168.1"
-      // More robust extraction handling "192.168.1", "192.168.1.x", "192.168.1.1/24"
       let baseIp = "192.168.1";
-      const match = range && range.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})/);
-      if (!match) {
-          res.write(`data: ${JSON.stringify({ complete: true, message: 'Invalid range format' })}\n\n`);
-          return res.end();
+      let startIpEnd = 1;
+      let endIpEnd = 254;
+
+      if (range) {
+          const matchFull = range.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})-(\d{1,3})$/);
+          if (matchFull) {
+              baseIp = matchFull[1];
+              startIpEnd = parseInt(matchFull[2]);
+              endIpEnd = parseInt(matchFull[3]);
+          } else {
+              const matchSingle = range.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})/);
+              if (matchSingle) {
+                   baseIp = matchSingle[1];
+                   startIpEnd = 1;
+                   endIpEnd = 254;
+              } else {
+                   res.write(`data: ${JSON.stringify({ complete: true, message: 'Invalid range format' })}\n\n`);
+                   return res.end();
+              }
+          }
       }
-      baseIp = match[1];
 
       const isWin = process.platform === 'win32';
-      const totalIPs = 254;
+      const totalIPsLocal = endIpEnd;
       let completed = 0;
+      const totalToScan = (endIpEnd - startIpEnd) + 1;
       const chunkSize = isWin ? 50 : 20;
 
       // Mark all existing assets in this subnet as "Offline" initially before we ping
@@ -428,13 +448,29 @@ async function startServer() {
 
                               // Get wmic details
                               // Note: Remote WMI might require domain admin privileges and firewall rules allowing it on the client.
+                              // Generate WMI query command. If credentials were provided via UI, use them.
+                              let credInjection = '';
+                              let credParam = '';
+                              if (activeCreds && activeCreds.domain && activeCreds.user) {
+                                  // Clean input to prevent PS injection, though this is an internal diagnostic tool
+                                  const domainSafe = activeCreds.domain.replace(/'/g, "''");
+                                  const userSafe = activeCreds.user.replace(/'/g, "''");
+                                  const passSafe = (activeCreds.password || '').replace(/'/g, "''");
+                                  credInjection = `
+                                    $secpasswd = ConvertTo-SecureString '${passSafe}' -AsPlainText -Force
+                                    $mycreds = New-Object System.Management.Automation.PSCredential ("${domainSafe}\\${userSafe}", $secpasswd)
+                                  `;
+                                  credParam = '-Credential $mycreds';
+                              }
+
                               const psCmd = `
                                 try {
                                     $ErrorActionPreference = 'Stop';
-                                    $cpu = (Get-WmiObject -ComputerName ${ip} Win32_Processor | Select-Object -First 1).Name;
-                                    $os = (Get-WmiObject -ComputerName ${ip} Win32_OperatingSystem | Select-Object -First 1).Caption;
-                                    $cs = Get-WmiObject -ComputerName ${ip} Win32_ComputerSystem | Select-Object -First 1;
-                                    $mem = Get-WmiObject -ComputerName ${ip} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
+                                    ${credInjection}
+                                    $cpu = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_Processor | Select-Object -First 1).Name;
+                                    $os = (Get-WmiObject -ComputerName ${ip} ${credParam} Win32_OperatingSystem | Select-Object -First 1).Caption;
+                                    $cs = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_ComputerSystem | Select-Object -First 1;
+                                    $mem = Get-WmiObject -ComputerName ${ip} ${credParam} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
                                     
                                     $ramGb = [math]::Round($mem.Sum / 1GB);
                                     
@@ -480,13 +516,13 @@ async function startServer() {
           await Promise.all(promises);
       };
 
-      for (let i = 1; i <= totalIPs; i += chunkSize) {
-          const end = Math.min(i + chunkSize - 1, totalIPs);
+      for (let i = startIpEnd; i <= endIpEnd; i += chunkSize) {
+          const end = Math.min(i + chunkSize - 1, endIpEnd);
           await runPingChunk(i, end);
           
           // Stream progress back to the front-end
-          const percent = Math.floor((completed / totalIPs) * 100);
-          res.write(`data: ${JSON.stringify({ progress: percent })}\n\n`);
+          const percent = Math.floor((completed / totalToScan) * 100);
+          res.write(`data: ${JSON.stringify({ progress: Math.min(percent, 100) })}\n\n`);
       }
 
       saveDatabase();
