@@ -379,58 +379,29 @@ async function startServer() {
                           const addToDb = (name: string) => {
                               const existingIndex = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
                               
-                              const generateRealisticDeviceData = () => {
-                                  const processors = ["Intel Core i5-12400 (6-Core)", "Intel Core i7-11700 (8-Core)", "AMD Ryzen 5 Pro 4650G", "Intel Core i5-10500T", "Intel Core i3-12100"];
-                                  const rams = ["8 GB DDR4-3200", "16 GB DDR4-3200", "16 GB DDR5-4800", "32 GB DDR4"];
-                                  const vgas = ["Intel UHD Graphics 730", "Intel UHD Graphics 770", "AMD Radeon Graphics", "NVIDIA T400 2GB"];
-                                  const models = ["Dell OptiPlex 3090 MFF", "HP ProDesk 400 G7", "Lenovo ThinkCentre M70q", "Dell OptiPlex 7000 SFF", "HP EliteDesk 800 G6"];
-                                  const storages = ["256 GB NVMe SSD", "512 GB PCIe M.2 SSD", "1 TB SATA HDD + 256 GB SSD", "1 TB NVMe SSD"];
-                                  const osVersions = ["Windows 11 Pro (22H2)", "Windows 10 Pro (22H2)", "Windows 11 Enterprise", "Windows 10 Enterprise LTSC", "Windows 11 Pro (23H2)"];
-                                  const users = ["IT-Admin", "User", "Manager", "Staff", "Marketing", "HR-Staff", "Developer", "Finance"];
-                                  
-                                  const hash = ip.split('.').reduce((acc, curr) => acc + parseInt(curr), 0);
-                                  const d = Math.floor(Math.random() * 10) + 1;
-                                  const h = Math.floor(Math.random() * 23);
-                                  const randomMac = "XX:XX:XX:XX:XX:XX".replace(/X/g, () => "0123456789ABCDEF"[Math.floor(Math.random() * 16)]);
-                              
-                                  return {
-                                      processor: processors[hash % processors.length],
-                                      ram: rams[(hash + 1) % rams.length],
-                                      vga: vgas[(hash + 2) % vgas.length],
-                                      model: models[(hash + 3) % models.length],
-                                      storage: storages[(hash + 4) % storages.length],
-                                      osVersion: osVersions[(hash + 5) % osVersions.length],
-                                      user: users[(hash + 6) % users.length],
-                                      macAddress: randomMac,
-                                      uptimeEn: `${d}D ${h}H`,
-                                      uptimeAr: `${d} يوم و ${h} ساعة`
-                                  };
-                              };
-
-                              let newData = generateRealisticDeviceData();
-
                               if (existingIndex !== -1) {
                                   assetsDatabase[existingIndex].status = "Active";
                                   assetsDatabase[existingIndex].asset = name;
-                                  if (assetsDatabase[existingIndex].processor === "N/A") assetsDatabase[existingIndex].processor = newData.processor;
-                                  if (assetsDatabase[existingIndex].ram === "N/A") assetsDatabase[existingIndex].ram = newData.ram;
-                                  if (assetsDatabase[existingIndex].vga === "N/A") assetsDatabase[existingIndex].vga = newData.vga;
-                                  if (assetsDatabase[existingIndex].model === "N/A") assetsDatabase[existingIndex].model = newData.model;
-                                  if (assetsDatabase[existingIndex].storage === "N/A") assetsDatabase[existingIndex].storage = newData.storage;
-                                  if (assetsDatabase[existingIndex].macAddress === "00:00:00:00:00:00") assetsDatabase[existingIndex].macAddress = newData.macAddress;
-                                  if (assetsDatabase[existingIndex].osVersion === "N/A") assetsDatabase[existingIndex].osVersion = newData.osVersion;
-                                  if (assetsDatabase[existingIndex].user === "N/A") assetsDatabase[existingIndex].user = newData.user;
                               } else {
                                   assetsDatabase.push({
                                       asset: name,
                                       ipAddress: ip,
                                       domain: "LOCAL.Network",
                                       status: "Active",
-                                      ...newData
+                                      processor: "N/A",
+                                      ram: "N/A",
+                                      vga: "N/A",
+                                      model: "N/A",
+                                      storage: "N/A",
+                                      macAddress: "00:00:00:00:00:00",
+                                      osVersion: "N/A",
+                                      user: "N/A",
+                                      uptimeEn: "0D 0H",
+                                      uptimeAr: "0 يوم و 0 ساعة"
                                   });
                               }
                           };
-                          
+
                           addToDb(pcName);
 
                           // Quick async DNS reverse lookup without dragging down the loop
@@ -441,6 +412,56 @@ async function startServer() {
                                   saveDatabase();
                               }
                           });
+
+                          // Fetch REAL data asynchronously (ARP for MAC, WMIC for hardware if Windows)
+                          if (isWin) {
+                              // Get MAC Address via arp
+                              exec(`arp -a ${ip}`, (err, stdout) => {
+                                  if (!err && stdout) {
+                                      const macMatch = stdout.match(/([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})/i);
+                                      if (macMatch) {
+                                          const idx = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
+                                          if (idx !== -1) assetsDatabase[idx].macAddress = macMatch[0].toUpperCase().replace(/-/g, ':');
+                                      }
+                                  }
+                              });
+
+                              // Get wmic details (wrap in powershell to do it all in one call and avoid spawning too many processes)
+                              // Note: Remote WMI might require domain admin privileges and firewall rules allowing it on the client.
+                              const psCmd = `
+                                $ErrorActionPreference = 'SilentlyContinue';
+                                $cpu = (Get-WmiObject -ComputerName ${ip} Win32_Processor | Select-Object -First 1).Name;
+                                $os = (Get-WmiObject -ComputerName ${ip} Win32_OperatingSystem | Select-Object -First 1).Caption;
+                                $cs = Get-WmiObject -ComputerName ${ip} Win32_ComputerSystem | Select-Object -First 1;
+                                $mem = Get-WmiObject -ComputerName ${ip} Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum;
+                                
+                                $ramGb = [math]::Round($mem.Sum / 1GB);
+                                
+                                Write-Output "CPU:$cpu|OS:$os|Model:$($cs.Model)|User:$($cs.UserName)|RAM:$ramGb"
+                              `.replace(/\n/g, ' ').trim();
+
+                              exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`, { timeout: 10000 }, (err, stdout) => {
+                                  if (!err && stdout) {
+                                      const idx = assetsDatabase.findIndex((a: any) => a.ipAddress === ip);
+                                      if (idx !== -1) {
+                                          const asset = assetsDatabase[idx];
+                                          const cpuMatch = stdout.match(/CPU:(.*?)\|/i);
+                                          const osMatch = stdout.match(/OS:(.*?)\|/i);
+                                          const modelMatch = stdout.match(/Model:(.*?)\|/i);
+                                          const userMatch = stdout.match(/User:(.*?)\|/i);
+                                          const ramMatch = stdout.match(/RAM:(.*?)$/i);
+                                          
+                                          if (cpuMatch && cpuMatch[1].trim()) asset.processor = cpuMatch[1].trim();
+                                          if (osMatch && osMatch[1].trim()) asset.osVersion = osMatch[1].trim();
+                                          if (modelMatch && modelMatch[1].trim()) asset.model = modelMatch[1].trim();
+                                          if (userMatch && userMatch[1].trim()) asset.user = userMatch[1].trim();
+                                          if (ramMatch && ramMatch[1].trim() && parseInt(ramMatch[1].trim()) > 0) asset.ram = `${ramMatch[1].trim()} GB`;
+                                          
+                                          saveDatabase();
+                                      }
+                                  }
+                              });
+                          }
                       }
                       resolve();
                   });
